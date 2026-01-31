@@ -1,7 +1,7 @@
 import * as z from "zod";
 
-import type { ContactDossier } from "@/types";
-import { storeGet, storeSet } from "@/backend/store";
+import type { ContactDossier } from "../../../types";
+import { storeGet, storeSet } from "../../store";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 
 const userDataKey = (phone: string) => `user:${phone}:data`;

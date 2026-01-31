@@ -47,7 +47,8 @@ export const adminAuthRouter = createTRPCRouter({
       });
 
       if (!res.ok) {
-        return { ok: false as const, error: res.error };
+        const err = (res as { ok: false; error: "INVALID_CREDENTIALS" | "NOT_CONFIGURED" }).error;
+        return { ok: false as const, error: err };
       }
 
       const session = await createAdminSession(res.user);

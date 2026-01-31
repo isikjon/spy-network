@@ -9,8 +9,7 @@ COPY . .
 
 RUN npx tsc \
   --skipLibCheck \
-  --outDir dist/backend \
-  --rootDir backend \
+  --outDir dist \
   --module commonjs \
   --moduleResolution node \
   --target ES2020 \

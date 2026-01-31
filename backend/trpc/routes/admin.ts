@@ -1,6 +1,6 @@
 import * as z from "zod";
 
-import { storeGet, storeListKeys } from "@/backend/store";
+import { storeGet, storeListKeys } from "../../store";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import {
   createAdminUser,
@@ -148,7 +148,10 @@ export const adminRouter = createTRPCRouter({
         role: input.role as AdminRole,
       });
 
-      if (!res.ok) return { ok: false as const, error: res.error };
+      if (!res.ok) {
+        const err = (res as { ok: false; error: "NOT_CONFIGURED" | "ALREADY_EXISTS" }).error;
+        return { ok: false as const, error: err };
+      }
       return { ok: true as const };
     }),
 
@@ -177,7 +180,10 @@ export const adminRouter = createTRPCRouter({
         newPassword: input.newPassword,
       });
 
-      if (!res.ok) return { ok: false as const, error: res.error };
+      if (!res.ok) {
+        const err = (res as { ok: false; error: "NOT_FOUND" | "NOT_CONFIGURED" }).error;
+        return { ok: false as const, error: err };
+      }
       return { ok: true as const };
     }),
 
@@ -207,7 +213,10 @@ export const adminRouter = createTRPCRouter({
         role: input.role as AdminRole,
       });
 
-      if (!res.ok) return { ok: false as const, error: res.error };
+      if (!res.ok) {
+        const err = (res as { ok: false; error: "NOT_FOUND" | "NOT_CONFIGURED" }).error;
+        return { ok: false as const, error: err };
+      }
       return { ok: true as const };
     }),
 
@@ -231,7 +240,10 @@ export const adminRouter = createTRPCRouter({
       }
 
       const res = await deleteAdminUser({ username: input.username });
-      if (!res.ok) return { ok: false as const, error: res.error };
+      if (!res.ok) {
+        const err = (res as { ok: false; error: "NOT_FOUND" | "NOT_CONFIGURED" }).error;
+        return { ok: false as const, error: err };
+      }
       return { ok: true as const };
     }),
 

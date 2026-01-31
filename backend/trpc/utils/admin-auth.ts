@@ -1,4 +1,4 @@
-import { storeGet, storeSet, storeDelete } from "@/backend/store";
+import { storeGet, storeSet, storeDelete } from "../../store";
 
 export type AdminRole = "admin" | "analyst" | "manager";
 export type AdminUser = { username: string; role: AdminRole };
@@ -160,7 +160,7 @@ export async function deleteAdminSession(token: string): Promise<void> {
 }
 
 export async function listAdminUsers(): Promise<AdminUser[]> {
-  const { storeListKeys } = await import("@/backend/store");
+  const { storeListKeys } = await import("../../store");
   const keys = await storeListKeys("admin:user:");
   const users: AdminUser[] = [];
 
