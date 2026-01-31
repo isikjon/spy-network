@@ -38,7 +38,7 @@ const ContactInfoSchema = z.object({
   photo: z.string().optional(),
 });
 
-const ContactDossierSchema: z.ZodType<ContactDossier> = z.object({
+const ContactDossierSchema = z.object({
   contact: ContactInfoSchema,
   sectors: z.array(z.string()),
   functionalCircle: z.union([
@@ -57,7 +57,7 @@ const ContactDossierSchema: z.ZodType<ContactDossier> = z.object({
   addedDate: z.coerce.date(),
   lastInteraction: z.coerce.date().optional(),
   powerGrouping: PowerGroupingSchema.optional(),
-});
+}) as z.ZodType<ContactDossier>;
 
 const UserAppDataSchema = z.object({
   phoneNumber: z.string().min(1),
