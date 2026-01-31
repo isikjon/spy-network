@@ -1,0 +1,49 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { httpBatchLink } from "@trpc/client";
+import { createTRPCReact } from "@trpc/react-query";
+import superjson from "superjson";
+
+import type { AppRouter } from "@/backend/trpc/app-router";
+
+export const trpc = createTRPCReact<AppRouter>();
+
+const getBaseUrl = () => {
+  const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+
+  if (!url) {
+    throw new Error(
+      "Missing EXPO_PUBLIC_RORK_API_BASE_URL. Please contact support.",
+    );
+  }
+
+  return url;
+};
+
+const USER_PHONE_STORAGE_KEY = "user_phone" as const;
+const ADMIN_TOKEN_STORAGE_KEY = "admin_auth_token" as const;
+
+export const trpcClient = trpc.createClient({
+  links: [
+    httpBatchLink({
+      url: `${getBaseUrl()}/api/trpc`,
+      transformer: superjson,
+      headers: async () => {
+        try {
+          const [phone, adminToken] = await Promise.all([
+            AsyncStorage.getItem(USER_PHONE_STORAGE_KEY),
+            AsyncStorage.getItem(ADMIN_TOKEN_STORAGE_KEY),
+          ]);
+
+          const headers: Record<string, string> = {};
+          if (phone) headers["x-user-phone"] = phone;
+          if (adminToken) headers["x-admin-auth"] = `Bearer ${adminToken}`;
+
+          return headers;
+        } catch (e) {
+          console.log("[trpc] failed to read auth headers", e);
+          return {};
+        }
+      },
+    }),
+  ],
+});
