@@ -42,7 +42,8 @@ adminApi.post("/admin-api/login", async (c) => {
   }
   const res = await verifyAdminPassword({ username, password });
   if (!res.ok) {
-    return c.json({ ok: false, error: res.error }, 401);
+    const err = (res as { ok: false; error: "INVALID_CREDENTIALS" | "NOT_CONFIGURED" }).error;
+    return c.json({ ok: false, error: err }, 401);
   }
   const session = await createAdminSession(res.user);
   return c.json({
