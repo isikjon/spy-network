@@ -8,11 +8,12 @@
     "scheme": "rork-app",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "plugins": [
       [
         "expo-router",
-        { "origin": "https://rork.com/" }
+        {
+          "origin": "https://rork.com/"
+        }
       ],
       "expo-font",
       "expo-web-browser",
@@ -36,20 +37,20 @@
         }
       ]
     ],
-
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "extra": {
-      "eas": {
-        "projectId": "4fb7875d-2312-477f-907b-3187ef42e085"
+      "EXPO_PUBLIC_RORK_API_BASE_URL": "https://droplogistics.ru",
+      "router": {
+        "origin": "https://rork.com/"
       },
-      "EXPO_PUBLIC_RORK_API_BASE_URL": "https://backend.89.111.137.51.sslip.io"
+      "eas": {
+        "projectId": "8a20e85f-34fc-4bff-9aa0-a3ed9cb94478"
+      }
     },
-
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.rork.spy-network-back",
@@ -62,7 +63,6 @@
       "accessesContactNotes": true,
       "usesIcloudStorage": true
     },
-
     "android": {
       "package": "app.rork.spy_network_back",
       "adaptiveIcon": {
@@ -70,21 +70,21 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "READ_CONTACTS",
-        "WRITE_CONTACTS",
-        "INTERNET"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.INTERNET",
+        "android.permission.RECORD_AUDIO"
       ]
     },
-
     "web": {
       "favicon": "./assets/images/favicon.png"
     },
-
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "owner": "websensei6"
   }
 }
