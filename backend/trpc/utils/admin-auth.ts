@@ -21,23 +21,27 @@ type AdminSession = {
 export const adminUserKey = (username: string) => `admin:user:${username}`;
 const adminSessionKey = (token: string) => `admin:session:${token}`;
 
+const DEFAULT_SECRET = "spy-network-default-secret-change-in-production";
+const DEFAULT_ADMIN_USERNAME = "admin";
+const DEFAULT_ADMIN_PASSWORD = "admin123";
+
 const ADMIN_AUTH_SECRET =
   typeof process.env.RORK_ADMIN_AUTH_SECRET === "string" &&
   process.env.RORK_ADMIN_AUTH_SECRET.length > 0
     ? process.env.RORK_ADMIN_AUTH_SECRET
-    : null;
+    : DEFAULT_SECRET;
 
 const ADMIN_DEFAULT_USERNAME =
   typeof process.env.RORK_ADMIN_DEFAULT_USERNAME === "string" &&
   process.env.RORK_ADMIN_DEFAULT_USERNAME.length > 0
     ? process.env.RORK_ADMIN_DEFAULT_USERNAME
-    : null;
+    : DEFAULT_ADMIN_USERNAME;
 
 const ADMIN_DEFAULT_PASSWORD =
   typeof process.env.RORK_ADMIN_DEFAULT_PASSWORD === "string" &&
   process.env.RORK_ADMIN_DEFAULT_PASSWORD.length > 0
     ? process.env.RORK_ADMIN_DEFAULT_PASSWORD
-    : null;
+    : DEFAULT_ADMIN_PASSWORD;
 
 export const getAdminAuthEnabled = () => {
   return !!ADMIN_AUTH_SECRET && !!ADMIN_DEFAULT_USERNAME && !!ADMIN_DEFAULT_PASSWORD;
