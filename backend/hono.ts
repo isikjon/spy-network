@@ -12,8 +12,9 @@ const app = new Hono();
 
 app.use("*", cors());
 
+// Клиент шлёт на /api/trpc — путь должен совпадать с endpoint
 app.use(
-  "/trpc/*",
+  "/api/trpc/*",
   trpcServer({
     endpoint: "/api/trpc",
     router: appRouter,
