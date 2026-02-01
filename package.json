@@ -5,8 +5,10 @@
   "scripts": {
     "eas-build-pre-install": "npm config set legacy-peer-deps true",
     "start": "npx expo start --tunnel",
+    "start:android": "npx expo start --android",
     "start-web": "npx expo start --web",
     "start-web-dev": "npx expo start --web",
+    "android": "npx expo run:android",
     "lint": "expo lint"
   },
   "dependencies": {

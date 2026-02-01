@@ -28,6 +28,17 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     .admin-detail h2 { font-size: 16px; letter-spacing: 2px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
     .admin-detail pre { font-size: 12px; color: var(--text-secondary); overflow-x: auto; margin: 0; white-space: pre-wrap; word-break: break-all; }
     .admin-login-error { margin-top: 12px; padding: 12px; font-size: 12px; color: var(--danger); background: rgba(255, 0, 51, 0.1); border: 1px solid var(--danger); }
+    .admin-tabs-row { display: flex; gap: 0; margin-bottom: 24px; border: 2px solid var(--border); background: var(--card); }
+    .admin-tab-btn { flex: 1; padding: 14px 20px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 2px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
+    .admin-tab-btn:hover { color: var(--text); }
+    .admin-tab-btn.active { background: var(--overlay); color: var(--primary); border-bottom: 2px solid var(--primary); }
+    .admin-panel { display: block; }
+    .admin-panel.admin-page-hidden { display: none; }
+    .admin-analytics-info { padding: 24px; border: 2px solid var(--border); background: var(--card); }
+    .admin-analytics-info h2 { font-size: 18px; letter-spacing: 2px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    .admin-analytics-info p, .admin-analytics-info li { font-size: 13px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px; }
+    .admin-analytics-info ol { padding-left: 24px; margin-bottom: 16px; }
+    .admin-analytics-info code { padding: 2px 6px; background: var(--overlay); border: 1px solid var(--border); font-size: 12px; }
   </style>
 </head>
 <body>
@@ -87,9 +98,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     <main class="page-content">
       <div class="admin-dashboard">
         <div class="admin-header-row">
-          <h1>ПОЛЬЗОВАТЕЛИ</h1>
+          <h1 id="dashboardTitle">ПОЛЬЗОВАТЕЛИ</h1>
           <button type="button" class="btn btn-secondary" id="logoutBtn">ВЫЙТИ</button>
         </div>
+        <div class="admin-tabs-row">
+          <button type="button" class="admin-tab-btn active" id="tabUsers" data-tab="users">ПОЛЬЗОВАТЕЛИ</button>
+          <button type="button" class="admin-tab-btn" id="tabAnalytics" data-tab="analytics">АНАЛИТИКА</button>
+        </div>
+        <div id="panelUsers" class="admin-panel">
         <div class="admin-toolbar">
           <input type="text" id="search" placeholder="Поиск по номеру...">
           <button type="button" class="btn" id="refreshBtn">ОБНОВИТЬ</button>
@@ -110,6 +126,22 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         <div id="userDetail" class="admin-detail admin-page-hidden">
           <h2 id="detailTitle"></h2>
           <pre id="detailContent"></pre>
+        </div>
+        </div>
+        <div id="panelAnalytics" class="admin-panel admin-page-hidden">
+          <div class="admin-analytics-info">
+            <h2>Аналитика в мобильном приложении</h2>
+            <p>Полный раздел <strong>«АНАЛИТИКА»</strong> (статистика по пользователям, шесть рукопожатий, властные группировки) доступен только в мобильном приложении Spy Network.</p>
+            <p><strong>Как зайти:</strong></p>
+            <ol>
+              <li>Откройте приложение на телефоне (или в эмуляторе).</li>
+              <li>Перейдите на экран <strong>Админ</strong> (из меню или по диплинку <code>…/admin</code>).</li>
+              <li>Введите логин и пароль администратора и нажмите <strong>Войти</strong>.</li>
+              <li>После входа токен сохраняется автоматически — вводить его нигде не нужно.</li>
+              <li>Появится вкладка <strong>«АНАЛИТИКА»</strong> с подразделами: пользователи, досье, сеть, профиль, шесть рукопожатий, властные группировки.</li>
+            </ol>
+            <p>В веб-версии админки (эта страница) доступен только список пользователей. Для полной аналитики используйте приложение.</p>
+          </div>
         </div>
       </div>
     </main>
@@ -199,6 +231,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       } catch (e) { console.error(e); }
     }
     document.getElementById('refreshBtn').onclick = loadUsers;
+    function switchTab(tab) {
+      var isUsers = tab === 'users';
+      document.getElementById('panelUsers').classList.toggle('admin-page-hidden', !isUsers);
+      document.getElementById('panelAnalytics').classList.toggle('admin-page-hidden', isUsers);
+      document.getElementById('tabUsers').classList.toggle('active', isUsers);
+      document.getElementById('tabAnalytics').classList.toggle('active', !isUsers);
+      document.getElementById('dashboardTitle').textContent = isUsers ? 'ПОЛЬЗОВАТЕЛИ' : 'АНАЛИТИКА';
+    }
+    document.getElementById('tabUsers').onclick = function() { switchTab('users'); };
+    document.getElementById('tabAnalytics').onclick = function() { switchTab('analytics'); };
     (async function init() {
       if (!token) return;
       const r = await fetch(API + '/admin-api/me', { headers: headers() });
