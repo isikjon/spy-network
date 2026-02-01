@@ -53,7 +53,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     let token = localStorage.getItem('adminToken');
     function headers() {
       const h = { 'Content-Type': 'application/json' };
-      if (token) h['Authorization'] = 'Bearer ' + token;
+      if (token) h['x-admin-auth'] = 'Bearer ' + token;
       return h;
     }
     function show(el, show) { el.classList.toggle('hidden', !show); }
