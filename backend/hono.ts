@@ -2,6 +2,8 @@ import { trpcServer } from "@hono/trpc-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
+import { adminApi } from "./admin-api";
+import { ADMIN_HTML } from "./admin-page";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 
@@ -17,6 +19,12 @@ app.use(
     createContext,
   }),
 );
+
+app.route("/", adminApi);
+
+app.get("/admin", (c) => {
+  return c.html(ADMIN_HTML);
+});
 
 app.get("/", (c) => {
   return c.json({ status: "ok", message: "API is running" });

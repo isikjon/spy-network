@@ -9,7 +9,7 @@ import type { ContactDossier } from '@/types';
 import { ThemeType, Theme, themes } from '@/constants/colors';
 import { Language, translations, Translations } from '@/constants/locales';
 import * as Localization from 'expo-localization';
-import * as FileSystem from 'expo-file-system/legacy';
+import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -530,16 +530,16 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
 
     const jsonString = JSON.stringify(backupData, null, 2);
-    const fileName = `network-backup-${new Date().toISOString().split('T')[0]}.json`;
-    const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-
-    await FileSystem.writeAsStringAsync(fileUri, jsonString, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    const dateStr = new Date().toISOString().split('T')[0];
+    const file = new File(Paths.document, `network-backup-${dateStr}.json`);
+    const ws = file.writableStream();
+    const writer = ws.getWriter();
+    await writer.write(new TextEncoder().encode(jsonString));
+    await writer.close();
 
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
-      await Sharing.shareAsync(fileUri);
+      await Sharing.shareAsync(file.uri);
     }
     return true;
   }, [dossiers, sectors, powerGroupings, phoneNumber, currentTheme, currentLanguage, tutorialCompleted]);
@@ -621,9 +621,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
       }
 
       const fileUri = result.assets[0].uri;
-      const jsonString = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      const file = new File(fileUri);
+      const ab = await file.arrayBuffer();
+      const jsonString = new TextDecoder().decode(ab);
 
       await loadFromJson(jsonString);
       return true;

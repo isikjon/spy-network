@@ -58,7 +58,8 @@
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
-        "NSContactsUsageDescription": "A message that tells the user why the app is requesting access to the user's contacts."
+        "NSContactsUsageDescription": "A message that tells the user why the app is requesting access to the user's contacts.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "accessesContactNotes": true,
       "usesIcloudStorage": true

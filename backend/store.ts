@@ -1,3 +1,6 @@
+import * as fs from "fs";
+import * as path from "path";
+
 export type JsonValue =
   | null
   | boolean
@@ -14,6 +17,56 @@ type StoreRecord = {
 };
 
 const memoryStore: Map<string, StoreRecord> = new Map();
+
+const getStorePath = (): string => {
+  const env = process.env.STORE_PATH;
+  if (env && typeof env === "string" && env.trim()) return env.trim();
+  return path.join(process.cwd(), "data", "store.json");
+};
+
+let persistScheduled: ReturnType<typeof setTimeout> | null = null;
+const PERSIST_DEBOUNCE_MS = 500;
+
+function schedulePersist(): void {
+  if (persistScheduled) return;
+  persistScheduled = setTimeout(() => {
+    persistScheduled = null;
+    persistToFile().catch((e) => console.error("[store] persist failed", e));
+  }, PERSIST_DEBOUNCE_MS);
+}
+
+async function persistToFile(): Promise<void> {
+  const filePath = getStorePath();
+  const dir = path.dirname(filePath);
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const obj: Record<string, StoreRecord> = {};
+    for (const [k, v] of memoryStore) obj[k] = v;
+    fs.writeFileSync(filePath, JSON.stringify(obj, null, 0), "utf8");
+  } catch (e) {
+    console.error("[store] persistToFile error", e);
+  }
+}
+
+export async function initStore(): Promise<void> {
+  const filePath = getStorePath();
+  try {
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, "utf8");
+      const obj = JSON.parse(raw) as Record<string, StoreRecord>;
+      for (const [k, v] of Object.entries(obj)) {
+        if (v && typeof v === "object" && "value" in v) {
+          memoryStore.set(k, { value: v.value, updatedAt: v.updatedAt ?? Date.now() });
+        }
+      }
+      console.log("[store] loaded from file", filePath, "keys:", memoryStore.size);
+    }
+  } catch (e) {
+    console.warn("[store] load from file failed, starting empty", e);
+  }
+}
 
 const hasRorkDbEnv = () => {
   const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
@@ -92,6 +145,7 @@ export async function storeSet<T>(key: string, value: T): Promise<void> {
   }
 
   memoryStore.set(key, { value, updatedAt: Date.now() });
+  schedulePersist();
 }
 
 export async function storeDelete(key: string): Promise<void> {
@@ -110,6 +164,7 @@ export async function storeDelete(key: string): Promise<void> {
   }
 
   memoryStore.delete(key);
+  schedulePersist();
 }
 
 export async function storeListKeys(prefix: string): Promise<string[]> {

@@ -16,5 +16,7 @@ RUN npx tsc \
   --lib ES2020,DOM \
   backend/server.ts
 
+RUN mkdir -p /app/data
+VOLUME /app/data
 EXPOSE 3000
 CMD ["node", "dist/backend/server.js"]

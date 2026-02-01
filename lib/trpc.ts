@@ -1,22 +1,25 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { httpBatchLink } from "@trpc/client";
 import { createTRPCReact } from "@trpc/react-query";
+import Constants from "expo-constants";
 import superjson from "superjson";
 
 import type { AppRouter } from "@/backend/trpc/app-router";
 
 export const trpc = createTRPCReact<AppRouter>();
 
+const DEFAULT_API_BASE_URL = "https://droplogistics.ru";
+
 const getBaseUrl = () => {
-  const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-
-  if (!url) {
-    throw new Error(
-      "Missing EXPO_PUBLIC_RORK_API_BASE_URL. Please contact support.",
-    );
+  const fromEnv = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+  if (fromEnv && typeof fromEnv === "string" && fromEnv.trim()) {
+    return fromEnv.trim();
   }
-
-  return url;
+  const fromExtra = Constants.expoConfig?.extra?.EXPO_PUBLIC_RORK_API_BASE_URL;
+  if (typeof fromExtra === "string" && fromExtra.trim()) {
+    return fromExtra.trim();
+  }
+  return DEFAULT_API_BASE_URL;
 };
 
 const USER_PHONE_STORAGE_KEY = "user_phone" as const;

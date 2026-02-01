@@ -1,3 +1,4 @@
+import "react-native-gesture-handler";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRootNavigationState, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -41,10 +42,10 @@ function RootLayoutNav() {
 
     if (isAuthenticated && inAuth) {
       if (hasNavigated.current) return;
-      console.log('[RootLayoutNav] redirect -> /', { rootSegment, isAuthenticated });
+      console.log('[RootLayoutNav] redirect -> /(tabs)', { rootSegment, isAuthenticated });
       hasNavigated.current = true;
       setTimeout(() => {
-        router.replace('/');
+        router.replace('/(tabs)');
       }, 0);
     }
 

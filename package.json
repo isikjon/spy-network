@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "scripts": {
     "eas-build-pre-install": "npm config set legacy-peer-deps true",
-    "start": "bunx rork start -p z4aqs70yydegnat9mtmzg --tunnel",
-    "start-web": "bunx rork start -p z4aqs70yydegnat9mtmzg --web --tunnel",
-    "start-web-dev": "DEBUG=expo* bunx rork start -p z4aqs70yydegnat9mtmzg --web --tunnel",
+    "start": "npx expo start --tunnel",
+    "start-web": "npx expo start --web",
+    "start-web-dev": "npx expo start --web",
     "lint": "expo lint"
   },
   "dependencies": {
