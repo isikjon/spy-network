@@ -65,6 +65,11 @@ async function sha256Base64Url(input: string): Promise<string> {
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+const isUsingBuiltInDefaults = () =>
+  ADMIN_AUTH_SECRET === DEFAULT_SECRET &&
+  ADMIN_DEFAULT_USERNAME === DEFAULT_ADMIN_USERNAME &&
+  ADMIN_DEFAULT_PASSWORD === DEFAULT_ADMIN_PASSWORD;
+
 export async function ensureDefaultAdmin(): Promise<void> {
   const secret = ADMIN_AUTH_SECRET;
   const username = ADMIN_DEFAULT_USERNAME;
@@ -77,7 +82,8 @@ export async function ensureDefaultAdmin(): Promise<void> {
 
   const key = adminUserKey(username);
   const existing = await storeGet<AdminRecord>(key);
-  if (existing) return;
+  const forceOverwrite = isUsingBuiltInDefaults();
+  if (existing && !forceOverwrite) return;
 
   const passwordHash = await sha256Base64Url(`${secret}:${password}`);
 
@@ -89,7 +95,7 @@ export async function ensureDefaultAdmin(): Promise<void> {
   };
 
   await storeSet(key, rec);
-  console.log("[backend][admin-auth] default admin created", { username });
+  console.log("[backend][admin-auth] default admin created/updated", { username });
 }
 
 export async function verifyAdminPassword(args: {
