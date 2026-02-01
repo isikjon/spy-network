@@ -97,12 +97,18 @@
 
                 <div class="admin-footer">
                     <a href="index.html">← Вернуться на главную</a>
+                    <br><br>
+                    <a href="https://droplogistics.ru/admin" target="_blank" rel="noopener">Панель на сервере (без приложения)</a>
                 </div>
             </div>
         </div>
     </main>
 
     <script>
+        // Настройки: порт Expo и админка бэкенда (работает без приложения)
+        var APP_PORT = 8081;
+        var BACKEND_ADMIN_URL = 'https://droplogistics.ru/admin';
+
         function toggleMenu() {
             document.getElementById('mobileMenu').classList.toggle('active');
         }
@@ -133,16 +139,11 @@
         }
 
         function getAdminUrl() {
-            // Determine the admin panel URL based on environment
-            const hostname = window.location.hostname;
-            
+            var hostname = window.location.hostname;
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                return 'http://localhost:8081/admin';
+                return 'http://localhost:' + APP_PORT + '/admin';
             }
-            
-            // For production, use the app's admin route
-            // This should be configured based on your deployment
-            return '/admin';
+            return 'http://' + hostname + ':' + APP_PORT + '/admin';
         }
 
         // Add spin animation
