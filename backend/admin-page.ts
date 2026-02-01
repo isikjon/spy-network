@@ -12,7 +12,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     input, button { padding: 8px 12px; margin: 4px; border-radius: 4px; border: 1px solid #444; background: #222; color: #eee; }
     button { cursor: pointer; }
     button.primary { background: #0a4; color: #000; border-color: #0a4; }
-    .error { color: #f66; }
+    .error { color: #f66; margin: 8px 0; padding: 8px; background: #2a1111; border-radius: 4px; }
     .hidden { display: none; }
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
@@ -62,10 +62,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       el.textContent = msg || '';
       el.classList.toggle('hidden', !msg);
     }
+    function loginErrorText(err) {
+      if (err === 'NOT_CONFIGURED') return 'На сервере не настроена админка. Задайте RORK_ADMIN_AUTH_SECRET, RORK_ADMIN_DEFAULT_USERNAME, RORK_ADMIN_DEFAULT_PASSWORD при запуске контейнера.';
+      if (err === 'INVALID_CREDENTIALS') return 'Неверный логин или пароль.';
+      return err || 'Ошибка входа';
+    }
     document.getElementById('loginBtn').onclick = async () => {
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
       if (!username || !password) { setError('Введите логин и пароль'); return; }
+      setError('');
       try {
         const r = await fetch(API + '/admin-api/login', {
           method: 'POST',
@@ -73,14 +79,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           body: JSON.stringify({ username, password })
         });
         const data = await r.json();
-        if (!data.ok) { setError(data.error === 'INVALID_CREDENTIALS' ? 'Неверный логин или пароль' : data.error); return; }
+        if (!data.ok) { setError(loginErrorText(data.error)); return; }
         token = data.token;
         localStorage.setItem('adminToken', token);
         setError('');
         show(document.getElementById('loginCard'), false);
         show(document.getElementById('dashboard'), true);
         loadUsers();
-      } catch (e) { setError('Ошибка сети'); }
+      } catch (e) { setError('Ошибка сети: ' + (e.message || 'нет ответа от сервера')); }
     };
     document.getElementById('logoutBtn').onclick = () => {
       token = null;
@@ -94,7 +100,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       if (query) url += '&query=' + encodeURIComponent(query);
       try {
         const r = await fetch(url, { headers: headers() });
-        if (r.status === 401) { document.getElementById('logoutBtn').click(); return; }
+        if (r.status === 401) {
+          token = null;
+          localStorage.removeItem('adminToken');
+          show(document.getElementById('dashboard'), false);
+          show(document.getElementById('loginCard'), true);
+          setError('Сессия недействительна или истекла. Войдите снова.');
+          return;
+        }
         const data = await r.json();
         if (!data.ok) return;
         const tbody = document.getElementById('usersBody');
