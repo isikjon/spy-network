@@ -143,7 +143,8 @@
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
                 return 'http://localhost:' + APP_PORT + '/admin';
             }
-            return 'http://' + hostname + ':' + APP_PORT + '/admin';
+            // На домене/сервере — админка на том же хосте, без порта
+            return window.location.origin + '/admin';
         }
 
         // Add spin animation
