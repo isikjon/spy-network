@@ -89,8 +89,9 @@ export const phoneAuthRouter = createTRPCRouter({
       const result = await plusofonCallToAuth(phone, webhookUrl);
 
       if (!result.ok) {
-        console.error("[phone-auth] plusofon callToAuth failed", result.error);
-        return { ok: false as const, error: "SEND_FAILED" as const, detail: result.error };
+        const errMsg = result.error;
+        console.error("[phone-auth] plusofon callToAuth failed", errMsg);
+        return { ok: false as const, error: "SEND_FAILED" as const, detail: errMsg };
       }
 
       // Сохраняем pending
