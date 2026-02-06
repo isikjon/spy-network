@@ -7,10 +7,23 @@ import { adminApi } from "./admin-api";
 import { ADMIN_HTML } from "./admin-page";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
+import { handlePlusofonWebhook } from "./trpc/routes/phone-auth";
 
 const app = new Hono();
 
 app.use("*", cors());
+
+// Вебхук от Plusofon (обратный Flash Call — подтверждение звонка)
+app.post("/auth/webhook/plusofon", async (c) => {
+  try {
+    const body = (await c.req.json()) as Record<string, unknown>;
+    const ok = await handlePlusofonWebhook(body);
+    return c.json({ ok });
+  } catch (e) {
+    console.error("[webhook] plusofon error", e);
+    return c.json({ ok: false }, 400);
+  }
+});
 
 // Клиент шлёт на /api/trpc — путь должен совпадать с endpoint
 app.use(

@@ -15,6 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 
 const STORAGE_KEYS = {
   PHONE_NUMBER: 'user_phone',
+  SESSION_TOKEN: 'user_session_token',
   THEME: 'app_theme',
   POWER_GROUPINGS: 'power_groupings',
   LANGUAGE: 'app_language',
@@ -325,9 +326,22 @@ export const [AppProvider, useApp] = createContextHook(() => {
     );
   }, [queryClient]);
 
+  const loginWithToken = useCallback(async (phone: string, token: string) => {
+    setPhoneNumber(phone);
+    await AsyncStorage.setItem(STORAGE_KEYS.PHONE_NUMBER, phone);
+    await AsyncStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, token);
+
+    queryClient.invalidateQueries({ queryKey: ['user_phone'] }).catch((e) =>
+      console.log('[AppContext] invalidate phone query failed', e),
+    );
+  }, [queryClient]);
+
   const logout = useCallback(async () => {
     setPhoneNumber(null);
-    await AsyncStorage.removeItem(STORAGE_KEYS.PHONE_NUMBER);
+    await AsyncStorage.multiRemove([
+      STORAGE_KEYS.PHONE_NUMBER,
+      STORAGE_KEYS.SESSION_TOKEN,
+    ]);
   }, []);
 
   const [selfContactEnsuredForPhone, setSelfContactEnsuredForPhone] = useState<string | null>(null);
@@ -666,6 +680,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     resetTutorial,
 
     login,
+    loginWithToken,
     logout,
 
     addDossier,

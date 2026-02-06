@@ -23,6 +23,7 @@ const getBaseUrl = () => {
 };
 
 const USER_PHONE_STORAGE_KEY = "user_phone" as const;
+const USER_SESSION_TOKEN_KEY = "user_session_token" as const;
 const ADMIN_TOKEN_STORAGE_KEY = "admin_auth_token" as const;
 
 export const trpcClient = trpc.createClient({
@@ -32,13 +33,19 @@ export const trpcClient = trpc.createClient({
       transformer: superjson,
       headers: async () => {
         try {
-          const [phone, adminToken] = await Promise.all([
+          const [phone, sessionToken, adminToken] = await Promise.all([
             AsyncStorage.getItem(USER_PHONE_STORAGE_KEY),
+            AsyncStorage.getItem(USER_SESSION_TOKEN_KEY),
             AsyncStorage.getItem(ADMIN_TOKEN_STORAGE_KEY),
           ]);
 
           const headers: Record<string, string> = {};
-          if (phone) headers["x-user-phone"] = phone;
+          // Токен сессии (верифицированный) имеет приоритет
+          if (sessionToken) {
+            headers["x-user-auth"] = `Bearer ${sessionToken}`;
+          } else if (phone) {
+            headers["x-user-phone"] = phone;
+          }
           if (adminToken) headers["x-admin-auth"] = `Bearer ${adminToken}`;
 
           return headers;
