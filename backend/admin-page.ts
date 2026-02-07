@@ -53,7 +53,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       </a>
       <div class="nav-links">
         <a href="/">ГЛАВНАЯ</a>
-        <a href="/admin.html" class="nav-admin active">ADMIN</a>
+        <a href="/admin" class="nav-admin active">ADMIN</a>
       </div>
     </div>
   </nav>

@@ -23,7 +23,7 @@
                 <a href="index.html">ГЛАВНАЯ</a>
                 <a href="privacy.html">КОНФИДЕНЦИАЛЬНОСТЬ</a>
                 <a href="support.html">ПОДДЕРЖКА</a>
-                <a href="admin.html" class="nav-admin active">ADMIN</a>
+                <a href="/admin" class="nav-admin active">ADMIN</a>
             </div>
             <button class="mobile-menu-btn" onclick="toggleMenu()">
                 <span></span>
@@ -37,7 +37,7 @@
         <a href="index.html">ГЛАВНАЯ</a>
         <a href="privacy.html">КОНФИДЕНЦИАЛЬНОСТЬ</a>
         <a href="support.html">ПОДДЕРЖКА</a>
-        <a href="admin.html">ADMIN</a>
+        <a href="/admin">ADMIN</a>
     </div>
 
     <main class="page-content">
@@ -97,8 +97,6 @@
 
                 <div class="admin-footer">
                     <a href="index.html">← Вернуться на главную</a>
-                    <br><br>
-                    <a href="https://droplogistics.ru/admin" target="_blank" rel="noopener">Панель на сервере (без приложения)</a>
                 </div>
             </div>
         </div>
@@ -107,7 +105,7 @@
     <script>
         // Настройки: порт Expo и админка бэкенда (работает без приложения)
         var APP_PORT = 8081;
-        var BACKEND_ADMIN_URL = 'https://droplogistics.ru/admin';
+        var BACKEND_ADMIN_URL = 'https://spynetwork.ru/admin';
 
         function toggleMenu() {
             document.getElementById('mobileMenu').classList.toggle('active');

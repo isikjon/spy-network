@@ -43,7 +43,7 @@
       "backgroundColor": "#ffffff"
     },
     "extra": {
-      "EXPO_PUBLIC_RORK_API_BASE_URL": "https://droplogistics.ru",
+      "EXPO_PUBLIC_RORK_API_BASE_URL": "https://spynetwork.ru",
       "router": {
         "origin": "https://rork.com/"
       },
