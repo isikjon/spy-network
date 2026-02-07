@@ -1,8 +1,8 @@
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
-import { Shield, Lock, Phone, ArrowLeft, PhoneCall } from 'lucide-react-native';
-import { useState, useEffect, useRef } from 'react';
+import { Shield, Lock, Phone, PhoneCall, CheckCircle, AlertTriangle } from 'lucide-react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -14,162 +14,151 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-type Step = 'phone' | 'call';
+type AuthStep = 'phone' | 'calling' | 'done' | 'error';
 
 export default function AuthScreen() {
-  const { loginWithToken, theme } = useApp();
+  const { loginWithToken, theme, t } = useApp();
+  const [phone, setPhone] = useState('');
+  const [step, setStep] = useState<AuthStep>('phone');
+  const [displayPhone, setDisplayPhone] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [retryAfter, setRetryAfter] = useState(0);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const styles = createStyles(theme);
 
-  const [step, setStep] = useState<Step>('phone');
-  const [phone, setPhone] = useState('');
-  const [displayPhone, setDisplayPhone] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-  const [polling, setPolling] = useState(false);
-
-  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const requestCallMutation = trpc.phoneAuth.requestCall.useMutation();
+  const checkStatusQuery = trpc.phoneAuth.checkStatus.useQuery(
+    { phone },
+    {
+      enabled: step === 'calling' && phone.length >= 10,
+      refetchInterval: step === 'calling' ? 3000 : false,
+      retry: false,
+    },
+  );
 
-  // Таймер повторной отправки
+  // Следим за результатом polling
   useEffect(() => {
-    if (cooldown > 0) {
-      cooldownRef.current = setInterval(() => {
-        setCooldown((prev) => {
-          if (prev <= 1) {
-            if (cooldownRef.current) clearInterval(cooldownRef.current);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (step !== 'calling') return;
+    const data = checkStatusQuery.data;
+    if (!data) return;
+
+    if (data.ok === true) {
+      // Верифицирован — сохраняем токен и логинимся
+      const token = (data as any).token as string;
+      const verifiedPhone = (data as any).phone as string;
+
+      setStep('done');
+
+      (async () => {
+        try {
+          // Логиним пользователя с токеном (сохраняет phone + session token)
+          await loginWithToken(verifiedPhone, token);
+          // Переходим на главную
+          setTimeout(() => {
+            router.replace('/');
+          }, 800);
+        } catch (e) {
+          console.error('[auth] login after verify failed', e);
+          setStep('error');
+          setErrorMsg('Ошибка сохранения сессии');
+        }
+      })();
     }
-    return () => {
-      if (cooldownRef.current) clearInterval(cooldownRef.current);
-    };
-  }, [cooldown > 0]);
 
-  // Поллинг статуса — проверяем, позвонил ли пользователь
-  const utils = trpc.useUtils();
-
-  useEffect(() => {
-    if (!polling || step !== 'call' || !phone) return;
-
-    let active = true;
-
-    const check = async () => {
-      try {
-        const result = await utils.phoneAuth.checkStatus.fetch({ phone });
-
-        if (!active) return;
-
-        if (result.ok) {
-          // Авторизация успешна
-          setPolling(false);
-          await loginWithToken(result.phone, result.token);
-          router.replace('/');
-          return;
-        }
-
-        if (result.error === 'EXPIRED') {
-          setPolling(false);
-          setError('Время истекло. Запросите новый номер.');
-          setStep('phone');
-          return;
-        }
-
-        if (result.error === 'NOT_FOUND') {
-          setPolling(false);
-          setError('Сессия не найдена. Попробуйте снова.');
-          setStep('phone');
-          return;
-        }
-
-        // WAITING — продолжаем поллить
-      } catch (e: any) {
-        console.log('[auth] polling error', e?.message || e);
+    if (data.ok === false) {
+      const error = (data as any).error as string;
+      if (error === 'EXPIRED') {
+        setStep('error');
+        setErrorMsg('Время истекло. Попробуйте снова.');
       }
-    };
+      // WAITING — продолжаем поллить (ничего не делаем)
+      // NOT_FOUND — тоже ошибка
+      if (error === 'NOT_FOUND') {
+        setStep('error');
+        setErrorMsg('Запрос не найден. Попробуйте снова.');
+      }
+    }
+  }, [checkStatusQuery.data, step, loginWithToken]);
 
-    // Первая проверка через 3 сек, потом каждые 3 сек
-    const timeout = setTimeout(() => {
-      check();
-      pollRef.current = setInterval(check, 3000);
-    }, 3000);
-
+  // Таймер retryAfter
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    retryTimerRef.current = setInterval(() => {
+      setRetryAfter((prev) => {
+        if (prev <= 1) {
+          if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => {
-      active = false;
-      clearTimeout(timeout);
-      if (pollRef.current) clearInterval(pollRef.current);
+      if (retryTimerRef.current) clearInterval(retryTimerRef.current);
     };
-  }, [polling, step, phone]);
+  }, [retryAfter]);
 
-  const handleRequestCall = async () => {
-    if (phone.length < 10 || loading) return;
-    setError('');
-    setLoading(true);
+  const handleRequestCall = useCallback(async () => {
+    if (phone.length < 10) return;
+
+    setStep('phone');
+    setErrorMsg('');
 
     try {
-      const result = await requestCallMutation.mutateAsync({ phone });
+      const res = await requestCallMutation.mutateAsync({ phone });
 
-      if (result.ok) {
-        setDisplayPhone(result.displayPhone);
-        setStep('call');
-        setCooldown(60);
-        setPolling(true);
+      if (res.ok) {
+        const dp = (res as any).displayPhone as string;
+        setDisplayPhone(dp);
+        setStep('calling');
+
+        if ((res as any).retryAfter) {
+          setRetryAfter((res as any).retryAfter as number);
+        }
       } else {
-        const err = result as any;
-        if (err.retryAfter) {
-          setDisplayPhone(err.displayPhone || '');
-          if (err.displayPhone) {
-            setStep('call');
-            setCooldown(err.retryAfter);
-            setPolling(true);
-          } else {
-            setError(`Подождите ${err.retryAfter} сек.`);
-            setCooldown(err.retryAfter);
-          }
-        } else if (err.error === 'INVALID_PHONE') {
-          setError('Неверный формат номера телефона');
-        } else if (err.error === 'SEND_FAILED') {
-          setError('Не удалось запросить звонок. Попробуйте позже.');
+        const error = (res as any).error as string;
+        const detail = (res as any).detail as string | undefined;
+        setStep('error');
+        if (error === 'INVALID_PHONE') {
+          setErrorMsg('Неверный формат номера');
+        } else if (error === 'SEND_FAILED') {
+          setErrorMsg(`Не удалось отправить запрос${detail ? `: ${detail}` : ''}`);
         } else {
-          setError(err.error || 'Ошибка');
+          setErrorMsg(error || 'Неизвестная ошибка');
         }
       }
     } catch (e: any) {
-      setError('Ошибка сети. Проверьте подключение.');
-      console.log('[auth] requestCall error', e?.message || e);
-    } finally {
-      setLoading(false);
+      console.error('[auth] requestCall failed', e);
+      setStep('error');
+      setErrorMsg(e?.message || 'Ошибка сети');
     }
-  };
+  }, [phone, requestCallMutation]);
 
-  const handleDialPhone = () => {
+  const handleCallPress = useCallback(() => {
     if (!displayPhone) return;
-    // Открываем номеронабиратель с номером
+    // Открываем набор номера
     const cleanPhone = displayPhone.replace(/[^0-9+]/g, '');
-    Linking.openURL(`tel:${cleanPhone}`).catch(() => {
-      // Если не удалось — ничего
+    const telUrl = `tel:${cleanPhone}`;
+    Linking.openURL(telUrl).catch((e) => {
+      console.error('[auth] failed to open tel:', e);
     });
-  };
+  }, [displayPhone]);
 
-  const handleResend = () => {
-    if (cooldown > 0) return;
-    setError('');
-    setPolling(false);
-    handleRequestCall();
-  };
-
-  const handleBack = () => {
+  const handleRetry = useCallback(() => {
     setStep('phone');
     setDisplayPhone('');
-    setError('');
-    setPolling(false);
-    if (pollRef.current) clearInterval(pollRef.current);
-  };
+    setErrorMsg('');
+    setRetryAfter(0);
+  }, []);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+    };
+  }, []);
 
   return (
     <View style={styles.background}>
@@ -181,7 +170,8 @@ export default function AuthScreen() {
         </View>
 
         <View style={styles.form}>
-          {step === 'phone' ? (
+          {/* ШАГ 1: Ввод номера */}
+          {step === 'phone' && (
             <>
               <View style={styles.inputContainer}>
                 <Lock size={20} color={theme.primaryDim} style={styles.inputIcon} />
@@ -198,84 +188,116 @@ export default function AuthScreen() {
                   value={phone}
                   onChangeText={setPhone}
                   maxLength={20}
-                  editable={!loading}
                 />
               </View>
 
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
               <TouchableOpacity
-                style={[styles.button, (phone.length < 10 || loading) && styles.buttonDisabled]}
+                style={[styles.button, (phone.length < 10 || requestCallMutation.isPending) && styles.buttonDisabled]}
                 onPress={handleRequestCall}
-                disabled={phone.length < 10 || loading}
+                disabled={phone.length < 10 || requestCallMutation.isPending}
                 activeOpacity={0.7}
               >
                 <View style={styles.buttonBorder}>
-                  {loading ? (
+                  {requestCallMutation.isPending ? (
                     <ActivityIndicator color={theme.primary} />
                   ) : (
-                    <Text style={styles.buttonText}>{'>'} ПОЛУЧИТЬ НОМЕР</Text>
+                    <Text style={styles.buttonText}>
+                      {'>'} ЗАПРОСИТЬ ЗВОНОК
+                    </Text>
                   )}
                 </View>
               </TouchableOpacity>
 
               <Text style={styles.hint}>
-                Вы получите номер, на который нужно позвонить для подтверждения
+                На указанный номер будет отправлен запрос.{'\n'}
+                Вам нужно будет позвонить на номер для подтверждения.
               </Text>
             </>
-          ) : (
-            <>
-              <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                <ArrowLeft size={16} color={theme.primaryDim} />
-                <Text style={styles.backText}>ИЗМЕНИТЬ НОМЕР</Text>
-              </TouchableOpacity>
+          )}
 
-              <View style={styles.inputContainer}>
-                <Lock size={20} color={theme.primaryDim} style={styles.inputIcon} />
-                <Text style={styles.label}>ПОЗВОНИТЕ НА НОМЕР</Text>
+          {/* ШАГ 2: Ожидание звонка */}
+          {step === 'calling' && (
+            <>
+              <View style={styles.callingContainer}>
+                <PhoneCall size={48} color={theme.primary} strokeWidth={1.5} />
+                <Text style={styles.callingTitle}>ПОЗВОНИТЕ НА НОМЕР</Text>
+                <Text style={styles.callingSubtitle}>
+                  Нажмите на номер ниже, чтобы позвонить
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.displayPhoneButton}
+                  onPress={handleCallPress}
+                  activeOpacity={0.7}
+                >
+                  <Phone size={24} color={theme.background} />
+                  <Text style={styles.displayPhoneText}>{displayPhone}</Text>
+                </TouchableOpacity>
+
+                <View style={styles.waitingRow}>
+                  <ActivityIndicator color={theme.primary} size="small" />
+                  <Text style={styles.waitingText}>Ожидаем подтверждение звонка...</Text>
+                </View>
+
+                {retryAfter > 0 && (
+                  <Text style={styles.retryText}>
+                    Повторный запрос через {retryAfter} сек.
+                  </Text>
+                )}
               </View>
 
-              <TouchableOpacity onPress={handleDialPhone} activeOpacity={0.7}>
-                <View style={styles.displayPhoneBox}>
-                  <PhoneCall size={28} color={theme.primary} />
-                  <Text style={styles.displayPhoneText}>
-                    {displayPhone || '...'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <Text style={styles.callHint}>
-                Нажмите на номер чтобы позвонить.{'\n'}
-                После звонка вход произойдёт автоматически.
-              </Text>
-
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-              {polling && (
-                <View style={styles.pollingContainer}>
-                  <ActivityIndicator color={theme.primary} size="small" />
-                  <Text style={styles.pollingText}>Ожидание звонка...</Text>
-                </View>
-              )}
-
               <TouchableOpacity
-                onPress={handleResend}
-                disabled={cooldown > 0}
-                style={styles.resendButton}
+                style={styles.secondaryButton}
+                onPress={handleRetry}
+                activeOpacity={0.7}
               >
-                <Text style={[styles.resendText, cooldown > 0 && { opacity: 0.4 }]}>
-                  {cooldown > 0
-                    ? `ПОВТОРНЫЙ ЗАПРОС ЧЕРЕЗ ${cooldown} СЕК.`
-                    : 'ЗАПРОСИТЬ НОВЫЙ НОМЕР'}
-                </Text>
+                <Text style={styles.secondaryButtonText}>← ВВЕСТИ ДРУГОЙ НОМЕР</Text>
               </TouchableOpacity>
             </>
+          )}
+
+          {/* ШАГ 3: Успех */}
+          {step === 'done' && (
+            <View style={styles.callingContainer}>
+              <CheckCircle size={60} color={theme.success || theme.primary} strokeWidth={1.5} />
+              <Text style={styles.callingTitle}>ДОСТУП ПОДТВЕРЖДЁН</Text>
+              <Text style={styles.callingSubtitle}>Подключение к системе...</Text>
+              <ActivityIndicator color={theme.primary} style={{ marginTop: 20 }} />
+            </View>
+          )}
+
+          {/* ШАГ 4: Ошибка */}
+          {step === 'error' && (
+            <>
+              <View style={styles.callingContainer}>
+                <AlertTriangle size={48} color={theme.danger} strokeWidth={1.5} />
+                <Text style={[styles.callingTitle, { color: theme.danger }]}>ОШИБКА</Text>
+                <Text style={styles.callingSubtitle}>{errorMsg}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.button}
+                onPress={handleRetry}
+                activeOpacity={0.7}
+              >
+                <View style={styles.buttonBorder}>
+                  <Text style={styles.buttonText}>{'>'} ПОПРОБОВАТЬ СНОВА</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {step === 'phone' && (
+            <Text style={styles.warning}>
+              ⚠ UNAUTHORIZED ACCESS PROHIBITED
+            </Text>
           )}
         </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>SYSTEM STATUS: ACTIVE</Text>
           <Text style={styles.footerText}>ENCRYPTION: AES-256</Text>
+          <Text style={styles.footerText}>AUTH: FLASH CALL VERIFICATION</Text>
         </View>
       </SafeAreaView>
     </View>
@@ -314,7 +336,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   form: {
     flex: 1,
     justifyContent: 'center',
-    paddingBottom: 100,
+    paddingBottom: 60,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -338,7 +360,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.overlay,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    marginBottom: 16,
+    marginBottom: 32,
   },
   phoneIcon: {
     marginRight: 12,
@@ -351,7 +373,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     letterSpacing: 2,
   },
   button: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   buttonDisabled: {
     opacity: 0.4,
@@ -370,80 +392,85 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontFamily: 'monospace' as const,
     letterSpacing: 2,
   },
-  errorText: {
-    fontSize: 12,
-    color: theme.danger || '#FF0033',
-    textAlign: 'center',
-    fontFamily: 'monospace' as const,
-    letterSpacing: 1,
-    marginBottom: 16,
-  },
   hint: {
     fontSize: 11,
     color: theme.primaryDim,
     textAlign: 'center',
     fontFamily: 'monospace' as const,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
+    lineHeight: 18,
   },
-  displayPhoneBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: theme.primary,
-    backgroundColor: theme.overlay,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    gap: 16,
-  },
-  displayPhoneText: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: theme.primary,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 3,
-  },
-  callHint: {
-    fontSize: 12,
-    color: theme.primaryDim,
+  warning: {
+    fontSize: 11,
+    color: theme.danger,
     textAlign: 'center',
     fontFamily: 'monospace' as const,
     letterSpacing: 1,
-    lineHeight: 20,
-    marginBottom: 20,
+    marginTop: 16,
   },
-  pollingContainer: {
-    flexDirection: 'row',
+  // Calling step
+  callingContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    marginBottom: 20,
+    gap: 16,
+    marginBottom: 32,
   },
-  pollingText: {
-    fontSize: 12,
+  callingTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
     color: theme.primary,
+    letterSpacing: 3,
     fontFamily: 'monospace' as const,
-    letterSpacing: 1,
+    textAlign: 'center',
   },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-    gap: 8,
-  },
-  backText: {
-    fontSize: 12,
+  callingSubtitle: {
+    fontSize: 13,
     color: theme.primaryDim,
     fontFamily: 'monospace' as const,
     letterSpacing: 1,
+    textAlign: 'center',
+    lineHeight: 20,
   },
-  resendButton: {
+  displayPhoneButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: theme.primary,
+    paddingHorizontal: 28,
+    paddingVertical: 18,
+    borderRadius: 4,
+    marginTop: 8,
+  },
+  displayPhoneText: {
+    fontSize: 22,
+    fontWeight: '900' as const,
+    color: theme.background,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  waitingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+  },
+  waitingText: {
+    fontSize: 12,
+    color: theme.primaryDim,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 0.5,
+  },
+  retryText: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 0.5,
+  },
+  secondaryButton: {
     alignItems: 'center',
     paddingVertical: 12,
   },
-  resendText: {
-    fontSize: 11,
+  secondaryButtonText: {
+    fontSize: 12,
     color: theme.primaryDim,
     fontFamily: 'monospace' as const,
     letterSpacing: 1,
