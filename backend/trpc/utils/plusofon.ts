@@ -30,7 +30,7 @@ function getFcToken(): string {
 }
 
 export type CallToAuthResult =
-  | { ok: true; requestAccepted: true; data: unknown }
+  | { ok: true; displayPhone: string; key: string }
   | { ok: false; error: string; statusCode: number; raw: unknown };
 
 /**
@@ -94,8 +94,16 @@ export async function plusofonCallToAuth(
       };
     }
 
-    // Успех — Plusofon принял запрос
-    return { ok: true, requestAccepted: true, data };
+    // Успех — Plusofon вернул номер для звонка и ключ
+    const respData = data as { data?: { phone?: string; key?: string } };
+    const displayPhone = respData?.data?.phone || "";
+    const key = respData?.data?.key || "";
+
+    if (!displayPhone) {
+      return { ok: false, error: "NO_PHONE_IN_RESPONSE", statusCode: res.status, raw: data };
+    }
+
+    return { ok: true, displayPhone, key };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[plusofon] callToAuth NETWORK ERROR", msg);

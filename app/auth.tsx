@@ -23,7 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
  * 4. done     — авторизация успешна
  * 5. error    — ошибка
  */
-type AuthStep = 'phone' | 'waiting' | 'calling' | 'done' | 'error';
+type AuthStep = 'phone' | 'calling' | 'done' | 'error';
 
 /**
  * Маска для номера телефона: +7 XXX-XXX-XX-XX
@@ -67,7 +67,7 @@ export default function AuthScreen() {
 
   // Поллинг статуса
   useEffect(() => {
-    if (step !== 'waiting' && step !== 'calling') return;
+    if (step !== 'calling') return;
     if (rawPhone.length < 11) return;
 
     let active = true;
@@ -110,17 +110,7 @@ export default function AuthScreen() {
           return;
         }
 
-        if (error === 'WAITING_CALL') {
-          // Номер для звонка получен!
-          const dp = (result as any).displayPhone as string;
-          if (dp && step !== 'calling') {
-            setDisplayPhone(dp);
-            setStep('calling');
-          }
-          return;
-        }
-
-        // WAITING_WEBHOOK — продолжаем ждать
+        // WAITING_CALL — продолжаем ждать звонок
       } catch (e: any) {
         console.log('[auth] poll error', e?.message || e);
       }
@@ -173,13 +163,11 @@ export default function AuthScreen() {
         if (resAny.retryAfter) {
           setRetryAfter(resAny.retryAfter);
         }
-        // Если уже есть displayPhone (из повторного запроса)
+        // Номер приходит сразу в ответе API
         if (resAny.displayPhone) {
           setDisplayPhone(resAny.displayPhone);
-          setStep('calling');
-        } else {
-          setStep('waiting');
         }
+        setStep('calling');
       } else {
         const resAny = res as any;
         setStep('error');
@@ -278,28 +266,7 @@ export default function AuthScreen() {
               </>
             )}
 
-            {/* ШАГ 2: Ожидание вебхука (номер ещё не получен) */}
-            {step === 'waiting' && (
-              <>
-                <View style={styles.callingContainer}>
-                  <ActivityIndicator color={theme.primary} size="large" />
-                  <Text style={styles.callingTitle}>ПОДГОТОВКА</Text>
-                  <Text style={styles.callingSubtitle}>
-                    Получаем номер для звонка...{'\n'}Подождите несколько секунд.
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={handleRetry}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.secondaryButtonText}>← ОТМЕНА</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {/* ШАГ 3: Номер получен — ждём звонок */}
+            {/* ШАГ 2: Номер получен — ждём звонок */}
             {step === 'calling' && (
               <>
                 <View style={styles.callingContainer}>
@@ -340,7 +307,7 @@ export default function AuthScreen() {
               </>
             )}
 
-            {/* ШАГ 4: Успех */}
+            {/* ШАГ 3: Успех */}
             {step === 'done' && (
               <View style={styles.callingContainer}>
                 <CheckCircle size={52} color={theme.success || theme.primary} strokeWidth={1.5} />
@@ -350,7 +317,7 @@ export default function AuthScreen() {
               </View>
             )}
 
-            {/* ШАГ 5: Ошибка */}
+            {/* ШАГ 4: Ошибка */}
             {step === 'error' && (
               <>
                 <View style={styles.callingContainer}>

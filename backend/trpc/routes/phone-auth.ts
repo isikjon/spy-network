@@ -104,11 +104,21 @@ export const phoneAuthRouter = createTRPCRouter({
         return { ok: false as const, error: "SEND_FAILED" as const, detail: errMsg };
       }
 
-      // Сохраняем pending — номер для звонка ещё не известен (придёт через вебхук)
+      // Номер для звонка пришёл сразу в ответе API!
+      const displayPhone = (result as { ok: true; displayPhone: string }).displayPhone;
+      const key = (result as { ok: true; key: string }).key;
+
+      // Форматируем номер: 79675180075 → 8-967-518-00-75
+      let formattedPhone = displayPhone;
+      const digits = displayPhone.replace(/[^0-9]/g, "");
+      if (digits.length === 11) {
+        formattedPhone = `8-${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}`;
+      }
+
       const pending: PendingAuth = {
         userPhone: phone,
-        displayPhone: null,
-        key: null,
+        displayPhone: formattedPhone,
+        key,
         verified: false,
         createdAt: Date.now(),
         expiresAt: Date.now() + PENDING_TTL_MS,
@@ -119,6 +129,7 @@ export const phoneAuthRouter = createTRPCRouter({
         ok: true as const,
         status: "requested" as const,
         phone,
+        displayPhone: formattedPhone,
       };
     }),
 
@@ -127,7 +138,6 @@ export const phoneAuthRouter = createTRPCRouter({
    * App поллит каждые 2-3 секунды.
    *
    * Возможные статусы:
-   * - waiting_webhook: ждём первый вебхук от Plusofon (номер для звонка)
    * - waiting_call: номер получен, ждём звонок от пользователя
    * - verified: звонок подтверждён, вот токен
    * - expired / not_found: ошибка
@@ -145,14 +155,6 @@ export const phoneAuthRouter = createTRPCRouter({
       if (Date.now() > pending.expiresAt) {
         await storeDelete(pendingKey(phone));
         return { ok: false as const, error: "EXPIRED" as const };
-      }
-
-      // Ещё не получили номер из вебхука
-      if (!pending.displayPhone) {
-        return {
-          ok: false as const,
-          error: "WAITING_WEBHOOK" as const,
-        };
       }
 
       // Номер есть, но звонок ещё не подтверждён
