@@ -6,13 +6,28 @@ import { createUserSession, deleteUserSession } from "../utils/user-session";
 import { storeGet, storeSet, storeDelete } from "../../store";
 
 /**
- * Pending-авторизация: ожидаем звонок от пользователя.
+ * Обратный Flash Call — полный флоу:
+ *
+ * 1. Пользователь вводит номер → app вызывает requestCall
+ * 2. Бэкенд отправляет POST call-to-auth в Plusofon
+ * 3. Plusofon шлёт ПЕРВЫЙ вебхук → мы получаем номер для звонка (displayPhone)
+ * 4. App поллит checkStatus → видит displayPhone → показывает пользователю
+ * 5. Пользователь звонит на номер
+ * 6. Plusofon шлёт ВТОРОЙ вебхук → подтверждение звонка → verified = true
+ * 7. App поллит checkStatus → видит verified → получает токен сессии
+ */
+
+/**
+ * Pending-авторизация.
  * Ключ: auth:pending:<phone>
  */
 type PendingAuth = {
   userPhone: string;
-  displayPhone: string;
-  key: string;
+  /** Номер для звонка — приходит через вебхук от Plusofon */
+  displayPhone: string | null;
+  /** Ключ проверки — приходит через вебхук от Plusofon */
+  key: string | null;
+  /** Звонок подтверждён — приходит через второй вебхук */
   verified: boolean;
   createdAt: number;
   expiresAt: number;
@@ -40,29 +55,22 @@ function normalizePhone(raw: string): string {
 }
 
 /**
- * Получить webhook URL из заголовков запроса.
+ * Получить webhook URL.
  */
-function getWebhookUrl(req: Request): string {
-  // Берём origin из запроса или из env
+function getWebhookUrl(): string {
   const envUrl = process.env.WEBHOOK_BASE_URL;
   if (envUrl) return `${envUrl.replace(/\/$/, "")}/auth/webhook/plusofon`;
-
-  try {
-    const url = new URL(req.url);
-    return `${url.protocol}//${url.host}/auth/webhook/plusofon`;
-  } catch {
-    return "https://spynetwork.ru/auth/webhook/plusofon";
-  }
+  return "https://spynetwork.ru/auth/webhook/plusofon";
 }
 
 export const phoneAuthRouter = createTRPCRouter({
   /**
    * Шаг 1: Запросить обратный Flash Call.
-   * Plusofon возвращает номер, на который пользователь должен позвонить.
+   * Plusofon примет запрос. Номер для звонка придёт через вебхук.
    */
   requestCall: publicProcedure
     .input(z.object({ phone: z.string().min(10) }))
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input }) => {
       const phone = normalizePhone(input.phone);
 
       if (phone.length < 11) {
@@ -74,18 +82,20 @@ export const phoneAuthRouter = createTRPCRouter({
       if (existing && Date.now() < existing.expiresAt) {
         const secondsAgo = Math.floor((Date.now() - existing.createdAt) / 1000);
         if (secondsAgo < 60) {
-          // Если уже есть pending — вернуть тот же номер
           return {
             ok: true as const,
-            displayPhone: existing.displayPhone,
+            status: "already_requested" as const,
             phone,
             retryAfter: 60 - secondsAgo,
+            // Если вебхук уже пришёл — вернём номер
+            displayPhone: existing.displayPhone,
           };
         }
       }
 
       // Вызываем Plusofon
-      const webhookUrl = getWebhookUrl(ctx.req);
+      const webhookUrl = getWebhookUrl();
+      console.log("[phone-auth] requesting call-to-auth", { phone, webhookUrl });
       const result = await plusofonCallToAuth(phone, webhookUrl);
 
       if (!result.ok) {
@@ -94,11 +104,11 @@ export const phoneAuthRouter = createTRPCRouter({
         return { ok: false as const, error: "SEND_FAILED" as const, detail: errMsg };
       }
 
-      // Сохраняем pending
+      // Сохраняем pending — номер для звонка ещё не известен (придёт через вебхук)
       const pending: PendingAuth = {
         userPhone: phone,
-        displayPhone: result.displayPhone,
-        key: result.key,
+        displayPhone: null,
+        key: null,
         verified: false,
         createdAt: Date.now(),
         expiresAt: Date.now() + PENDING_TTL_MS,
@@ -107,15 +117,20 @@ export const phoneAuthRouter = createTRPCRouter({
 
       return {
         ok: true as const,
-        displayPhone: result.displayPhone,
+        status: "requested" as const,
         phone,
       };
     }),
 
   /**
-   * Шаг 2: Проверить статус — позвонил ли пользователь.
-   * Приложение поллит этот эндпоинт каждые 2-3 секунды.
-   * Когда Plusofon присылает вебхук — verified = true.
+   * Шаг 2: Проверить статус авторизации.
+   * App поллит каждые 2-3 секунды.
+   *
+   * Возможные статусы:
+   * - waiting_webhook: ждём первый вебхук от Plusofon (номер для звонка)
+   * - waiting_call: номер получен, ждём звонок от пользователя
+   * - verified: звонок подтверждён, вот токен
+   * - expired / not_found: ошибка
    */
   checkStatus: publicProcedure
     .input(z.object({ phone: z.string().min(10) }))
@@ -132,8 +147,21 @@ export const phoneAuthRouter = createTRPCRouter({
         return { ok: false as const, error: "EXPIRED" as const };
       }
 
+      // Ещё не получили номер из вебхука
+      if (!pending.displayPhone) {
+        return {
+          ok: false as const,
+          error: "WAITING_WEBHOOK" as const,
+        };
+      }
+
+      // Номер есть, но звонок ещё не подтверждён
       if (!pending.verified) {
-        return { ok: false as const, error: "WAITING" as const };
+        return {
+          ok: false as const,
+          error: "WAITING_CALL" as const,
+          displayPhone: pending.displayPhone,
+        };
       }
 
       // Верифицирован! Создаём сессию.
@@ -175,38 +203,77 @@ export const phoneAuthRouter = createTRPCRouter({
 });
 
 /**
- * Обработка вебхука от Plusofon.
- * Plusofon POST-ит сюда когда пользователь позвонил на номер.
- * Мы помечаем pending как verified.
+ * Обработка вебхуков от Plusofon.
+ *
+ * ПЕРВЫЙ вебхук: Plusofon присылает номер для звонка.
+ *   body: { phone: "8XXXXXXXXXX", key: "abc123" }
+ *   — phone это номер для звонка (служебный), НЕ номер пользователя
+ *
+ * ВТОРОЙ вебхук: подтверждение, что пользователь позвонил.
+ *   body: { ... подтверждение ... }
+ *
+ * Проблема: в первом вебхуке phone — это служебный номер,
+ * а нам нужно сопоставить с номером пользователя.
+ * Решение: ищем среди всех pending авторизаций.
  */
 export async function handlePlusofonWebhook(body: Record<string, unknown>): Promise<boolean> {
-  console.log("[phone-auth] webhook received", body);
+  console.log("[phone-auth] WEBHOOK received:", JSON.stringify(body, null, 2));
 
-  // Plusofon присылает phone (номер пользователя) и key
-  const userPhone = String(body.phone || body.caller || "").replace(/[^0-9]/g, "");
-  const key = String(body.key || body.request_key || "");
+  const webhookPhone = String(body.phone || "").replace(/[^0-9]/g, "");
+  const key = String(body.key || "");
+  const status = body.status || body.result || body.event;
 
-  if (!userPhone) {
-    console.warn("[phone-auth] webhook: no phone in body");
-    return false;
+  console.log("[phone-auth] webhook parsed:", { webhookPhone, key, status, bodyKeys: Object.keys(body) });
+
+  // Перебираем все pending авторизации и ищем совпадение
+  const { storeGetAll } = await import("../../store");
+  const allKeys = await storeGetAll<PendingAuth>("auth:pending:");
+
+  for (const [storeKey, pending] of Object.entries(allKeys)) {
+    if (Date.now() > pending.expiresAt) {
+      continue;
+    }
+
+    // ПЕРВЫЙ вебхук: номер для звонка ещё не получен
+    if (!pending.displayPhone && webhookPhone && key) {
+      // Plusofon присылает номер для звонка — сохраняем
+      pending.displayPhone = webhookPhone.length >= 7 ? webhookPhone : null;
+      pending.key = key;
+
+      // Форматируем номер для отображения
+      if (pending.displayPhone) {
+        // Если 11 цифр начинается с 8 — форматируем как 8-XXX-XXX-XX-XX
+        if (pending.displayPhone.length === 11 && pending.displayPhone.startsWith("8")) {
+          const d = pending.displayPhone;
+          pending.displayPhone = `8-${d.slice(1, 4)}-${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}`;
+        }
+      }
+
+      await storeSet(storeKey, pending);
+      console.log("[phone-auth] webhook: stored displayPhone for", pending.userPhone, "→", pending.displayPhone);
+      return true;
+    }
+
+    // ВТОРОЙ вебхук: подтверждение звонка (номер уже есть, ещё не verified)
+    if (pending.displayPhone && !pending.verified) {
+      // Проверяем — это подтверждение звонка (может содержать статус, или key совпадает)
+      const isConfirmation =
+        status === "success" ||
+        status === "confirmed" ||
+        status === "completed" ||
+        (key && pending.key && key === pending.key) ||
+        // Если phone в вебхуке совпадает с номером пользователя — это подтверждение
+        (webhookPhone === pending.userPhone);
+
+      if (isConfirmation) {
+        pending.verified = true;
+        await storeSet(storeKey, pending);
+        console.log("[phone-auth] webhook: VERIFIED", pending.userPhone);
+        return true;
+      }
+    }
   }
 
-  // Ищем pending по номеру
-  const pending = await storeGet<PendingAuth>(pendingKey(userPhone));
-  if (!pending) {
-    console.warn("[phone-auth] webhook: no pending for", userPhone);
-    return false;
-  }
-
-  if (Date.now() > pending.expiresAt) {
-    await storeDelete(pendingKey(userPhone));
-    console.warn("[phone-auth] webhook: pending expired for", userPhone);
-    return false;
-  }
-
-  // Помечаем как верифицированный
-  pending.verified = true;
-  await storeSet(pendingKey(userPhone), pending);
-  console.log("[phone-auth] webhook: verified", userPhone);
-  return true;
+  console.warn("[phone-auth] webhook: no matching pending auth found");
+  return false;
 }

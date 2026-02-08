@@ -15,29 +15,29 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-type AuthStep = 'phone' | 'calling' | 'done' | 'error';
+/**
+ * Этапы авторизации:
+ * 1. phone    — ввод номера
+ * 2. waiting  — запрос отправлен, ждём вебхук от Plusofon с номером для звонка
+ * 3. calling  — номер получен, ждём звонок от пользователя
+ * 4. done     — авторизация успешна
+ * 5. error    — ошибка
+ */
+type AuthStep = 'phone' | 'waiting' | 'calling' | 'done' | 'error';
 
 /**
  * Маска для номера телефона: +7 XXX-XXX-XX-XX
- * Принимает любой ввод, оставляет только цифры, форматирует.
  */
 function formatPhoneMask(raw: string): string {
-  // Убираем всё кроме цифр
   let digits = raw.replace(/[^0-9]/g, '');
-
-  // Если начинается с 8 — меняем на 7
   if (digits.startsWith('8') && digits.length > 1) {
     digits = '7' + digits.slice(1);
   }
-  // Если не начинается с 7 — добавляем
   if (digits.length > 0 && !digits.startsWith('7')) {
     digits = '7' + digits;
   }
-
-  // Ограничиваем до 11 цифр (7 + 10)
   digits = digits.slice(0, 11);
 
-  // Форматируем: +7 XXX-XXX-XX-XX
   if (digits.length === 0) return '';
   if (digits.length <= 1) return '+7';
   if (digits.length <= 4) return `+7 ${digits.slice(1)}`;
@@ -46,7 +46,6 @@ function formatPhoneMask(raw: string): string {
   return `+7 ${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}`;
 }
 
-/** Извлечь чистые цифры из отформатированного номера */
 function extractDigits(formatted: string): string {
   return formatted.replace(/[^0-9]/g, '');
 }
@@ -58,62 +57,87 @@ export default function AuthScreen() {
   const [displayPhone, setDisplayPhone] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [retryAfter, setRetryAfter] = useState(0);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const styles = createStyles(theme);
-
-  // Чистый номер для отправки на сервер (79XXXXXXXXX)
   const rawPhone = extractDigits(formattedPhone);
 
   const requestCallMutation = trpc.phoneAuth.requestCall.useMutation();
-  const checkStatusQuery = trpc.phoneAuth.checkStatus.useQuery(
-    { phone: rawPhone },
-    {
-      enabled: step === 'calling' && rawPhone.length >= 11,
-      refetchInterval: step === 'calling' ? 3000 : false,
-      retry: false,
-    },
-  );
+  const utils = trpc.useUtils();
 
-  // Следим за результатом polling
+  // Поллинг статуса
   useEffect(() => {
-    if (step !== 'calling') return;
-    const data = checkStatusQuery.data;
-    if (!data) return;
+    if (step !== 'waiting' && step !== 'calling') return;
+    if (rawPhone.length < 11) return;
 
-    if (data.ok === true) {
-      const token = (data as any).token as string;
-      const verifiedPhone = (data as any).phone as string;
+    let active = true;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-      setStep('done');
+    const check = async () => {
+      try {
+        const result = await utils.phoneAuth.checkStatus.fetch({ phone: rawPhone });
 
-      (async () => {
-        try {
-          await loginWithToken(verifiedPhone, token);
-          setTimeout(() => {
-            router.replace('/');
-          }, 800);
-        } catch (e) {
-          console.error('[auth] login after verify failed', e);
-          setStep('error');
-          setErrorMsg('Ошибка сохранения сессии');
+        if (!active) return;
+
+        if (result.ok === true) {
+          // Верифицирован!
+          const token = (result as any).token as string;
+          const verifiedPhone = (result as any).phone as string;
+          setStep('done');
+
+          try {
+            await loginWithToken(verifiedPhone, token);
+            setTimeout(() => router.replace('/'), 800);
+          } catch (e) {
+            console.error('[auth] login failed', e);
+            setStep('error');
+            setErrorMsg('Ошибка сохранения сессии');
+          }
+          return;
         }
-      })();
-    }
 
-    if (data.ok === false) {
-      const error = (data as any).error as string;
-      if (error === 'EXPIRED') {
-        setStep('error');
-        setErrorMsg('Время истекло. Попробуйте снова.');
+        const error = (result as any).error as string;
+
+        if (error === 'EXPIRED') {
+          setStep('error');
+          setErrorMsg('Время истекло. Попробуйте снова.');
+          return;
+        }
+
+        if (error === 'NOT_FOUND') {
+          setStep('error');
+          setErrorMsg('Запрос не найден. Попробуйте снова.');
+          return;
+        }
+
+        if (error === 'WAITING_CALL') {
+          // Номер для звонка получен!
+          const dp = (result as any).displayPhone as string;
+          if (dp && step !== 'calling') {
+            setDisplayPhone(dp);
+            setStep('calling');
+          }
+          return;
+        }
+
+        // WAITING_WEBHOOK — продолжаем ждать
+      } catch (e: any) {
+        console.log('[auth] poll error', e?.message || e);
       }
-      if (error === 'NOT_FOUND') {
-        setStep('error');
-        setErrorMsg('Запрос не найден. Попробуйте снова.');
-      }
-    }
-  }, [checkStatusQuery.data, step, loginWithToken]);
+    };
+
+    // Первая проверка через 2 секунды, потом каждые 2 секунды
+    const timeout = setTimeout(() => {
+      check();
+      interval = setInterval(check, 2500);
+    }, 2000);
+
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
+  }, [step, rawPhone]);
 
   // Таймер retryAfter
   useEffect(() => {
@@ -139,30 +163,32 @@ export default function AuthScreen() {
   const handleRequestCall = useCallback(async () => {
     if (rawPhone.length < 11) return;
 
-    setStep('phone');
     setErrorMsg('');
 
     try {
       const res = await requestCallMutation.mutateAsync({ phone: rawPhone });
 
       if (res.ok) {
-        const dp = (res as any).displayPhone as string;
-        setDisplayPhone(dp);
-        setStep('calling');
-
-        if ((res as any).retryAfter) {
-          setRetryAfter((res as any).retryAfter as number);
+        const resAny = res as any;
+        if (resAny.retryAfter) {
+          setRetryAfter(resAny.retryAfter);
+        }
+        // Если уже есть displayPhone (из повторного запроса)
+        if (resAny.displayPhone) {
+          setDisplayPhone(resAny.displayPhone);
+          setStep('calling');
+        } else {
+          setStep('waiting');
         }
       } else {
-        const error = (res as any).error as string;
-        const detail = (res as any).detail as string | undefined;
+        const resAny = res as any;
         setStep('error');
-        if (error === 'INVALID_PHONE') {
+        if (resAny.error === 'INVALID_PHONE') {
           setErrorMsg('Неверный формат номера');
-        } else if (error === 'SEND_FAILED') {
-          setErrorMsg(`Не удалось отправить запрос${detail ? `: ${detail}` : ''}`);
+        } else if (resAny.error === 'SEND_FAILED') {
+          setErrorMsg(`Ошибка запроса${resAny.detail ? `: ${resAny.detail}` : ''}`);
         } else {
-          setErrorMsg(error || 'Неизвестная ошибка');
+          setErrorMsg(resAny.error || 'Неизвестная ошибка');
         }
       }
     } catch (e: any) {
@@ -175,7 +201,10 @@ export default function AuthScreen() {
   const handleCallPress = useCallback(() => {
     if (!displayPhone) return;
     const cleanPhone = displayPhone.replace(/[^0-9+]/g, '');
-    Linking.openURL(`tel:${cleanPhone}`).catch((e) => {
+    const telUri = cleanPhone.startsWith('+') || cleanPhone.startsWith('8')
+      ? `tel:${cleanPhone}`
+      : `tel:+${cleanPhone}`;
+    Linking.openURL(telUri).catch((e) => {
       console.error('[auth] failed to open tel:', e);
     });
   }, [displayPhone]);
@@ -185,14 +214,6 @@ export default function AuthScreen() {
     setDisplayPhone('');
     setErrorMsg('');
     setRetryAfter(0);
-  }, []);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      if (retryTimerRef.current) clearInterval(retryTimerRef.current);
-    };
   }, []);
 
   const isPhoneReady = rawPhone.length === 11;
@@ -214,6 +235,7 @@ export default function AuthScreen() {
 
           {/* Form */}
           <View style={styles.form}>
+
             {/* ШАГ 1: Ввод номера */}
             {step === 'phone' && (
               <>
@@ -251,20 +273,40 @@ export default function AuthScreen() {
                 </TouchableOpacity>
 
                 <Text style={styles.hint}>
-                  На указанный номер будет отправлен запрос.{'\n'}
-                  Вам нужно будет позвонить на номер{'\n'}для подтверждения.
+                  Вам будет показан номер,{'\n'}на который нужно позвонить для подтверждения.
                 </Text>
               </>
             )}
 
-            {/* ШАГ 2: Ожидание звонка */}
+            {/* ШАГ 2: Ожидание вебхука (номер ещё не получен) */}
+            {step === 'waiting' && (
+              <>
+                <View style={styles.callingContainer}>
+                  <ActivityIndicator color={theme.primary} size="large" />
+                  <Text style={styles.callingTitle}>ПОДГОТОВКА</Text>
+                  <Text style={styles.callingSubtitle}>
+                    Получаем номер для звонка...{'\n'}Подождите несколько секунд.
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={handleRetry}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.secondaryButtonText}>← ОТМЕНА</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* ШАГ 3: Номер получен — ждём звонок */}
             {step === 'calling' && (
               <>
                 <View style={styles.callingContainer}>
                   <PhoneCall size={44} color={theme.primary} strokeWidth={1.5} />
                   <Text style={styles.callingTitle}>ПОЗВОНИТЕ{'\n'}НА НОМЕР</Text>
                   <Text style={styles.callingSubtitle}>
-                    Нажмите на номер ниже, чтобы позвонить
+                    Нажмите на кнопку ниже, чтобы позвонить
                   </Text>
 
                   <TouchableOpacity
@@ -298,7 +340,7 @@ export default function AuthScreen() {
               </>
             )}
 
-            {/* ШАГ 3: Успех */}
+            {/* ШАГ 4: Успех */}
             {step === 'done' && (
               <View style={styles.callingContainer}>
                 <CheckCircle size={52} color={theme.success || theme.primary} strokeWidth={1.5} />
@@ -308,7 +350,7 @@ export default function AuthScreen() {
               </View>
             )}
 
-            {/* ШАГ 4: Ошибка */}
+            {/* ШАГ 5: Ошибка */}
             {step === 'error' && (
               <>
                 <View style={styles.callingContainer}>
@@ -334,7 +376,7 @@ export default function AuthScreen() {
           <View style={styles.footer}>
             <Text style={styles.footerText}>SYSTEM STATUS: ACTIVE</Text>
             <Text style={styles.footerText}>ENCRYPTION: AES-256</Text>
-            <Text style={styles.footerText}>AUTH: FLASH CALL VERIFICATION</Text>
+            <Text style={styles.footerText}>AUTH: REVERSE FLASH CALL</Text>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -445,7 +487,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     letterSpacing: 0.5,
     lineHeight: 18,
   },
-  // Calling step
   callingContainer: {
     alignItems: 'center',
     gap: 14,

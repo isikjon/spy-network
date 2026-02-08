@@ -167,6 +167,22 @@ export async function storeDelete(key: string): Promise<void> {
   schedulePersist();
 }
 
+/**
+ * Получить все записи по префиксу ключа.
+ * Возвращает объект: { "key1": value1, "key2": value2, ... }
+ */
+export async function storeGetAll<T>(prefix: string): Promise<Record<string, T>> {
+  const result: Record<string, T> = {};
+  const keys = await storeListKeys(prefix);
+  for (const key of keys) {
+    const val = await storeGet<T>(key);
+    if (val !== null) {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
 export async function storeListKeys(prefix: string): Promise<string[]> {
   if (hasRorkDbEnv()) {
     try {
