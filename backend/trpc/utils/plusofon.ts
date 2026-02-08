@@ -22,9 +22,17 @@
 const BASE = "https://restapi.plusofon.ru";
 const CLIENT_ID = 10553; // всегда 10553 (из документации)
 
-function getToken(): string {
-  const t = process.env.PLUSOFON_TOKEN;
-  if (!t) throw new Error("PLUSOFON_TOKEN env is not set");
+/** Основной API-токен Plusofon (Authorization header) */
+function getApiToken(): string {
+  const t = process.env.PLUSOFON_API_TOKEN;
+  if (!t) throw new Error("PLUSOFON_API_TOKEN env is not set");
+  return t;
+}
+
+/** Flash Call access_token (в body запроса) */
+function getFlashCallToken(): string {
+  const t = process.env.PLUSOFON_FC_TOKEN;
+  if (!t) throw new Error("PLUSOFON_FC_TOKEN env is not set");
   return t;
 }
 
@@ -43,13 +51,14 @@ export async function plusofonCallToAuth(
   userPhone: string,
   webhookUrl: string,
 ): Promise<CallToAuthResult> {
-  const token = getToken();
+  const apiToken = getApiToken();
+  const fcToken = getFlashCallToken();
   const url = `${BASE}/api/v1/flash-call/call-to-auth`;
 
   const requestBody = {
     client: CLIENT_ID,
     phone: userPhone,
-    access_token: token,
+    access_token: fcToken,
     webhook_url: webhookUrl,
   };
 
@@ -57,8 +66,8 @@ export async function plusofonCallToAuth(
     url,
     phone: userPhone,
     webhookUrl,
-    tokenLength: token.length,
-    tokenPrefix: token.slice(0, 6) + "...",
+    apiTokenPrefix: apiToken.slice(0, 6) + "...",
+    fcTokenPrefix: fcToken.slice(0, 6) + "...",
   });
 
   try {
@@ -66,7 +75,7 @@ export async function plusofonCallToAuth(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
+        "Authorization": `Bearer ${apiToken}`,
       },
       body: JSON.stringify(requestBody),
     });
