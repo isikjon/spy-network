@@ -80,7 +80,7 @@ export async function plusofonCallToAuth(
 
     console.log("[plusofon] callToAuth RESPONSE", {
       status: res.status,
-      headers: Object.fromEntries(res.headers.entries()),
+      contentType: res.headers.get("content-type"),
       data,
     });
 
