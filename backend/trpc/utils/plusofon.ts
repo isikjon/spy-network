@@ -41,12 +41,14 @@ export async function plusofonCallToAuth(
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
       body: JSON.stringify({
         client: CLIENT_ID,
         phone: userPhone,
         webhook_url: webhookUrl,
-        access_token: token,
       }),
     });
 
