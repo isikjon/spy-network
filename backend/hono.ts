@@ -14,9 +14,36 @@ const app = new Hono();
 app.use("*", cors());
 
 // Вебхук от Plusofon (обратный Flash Call — подтверждение звонка)
+// Plusofon может слать как JSON, так и form-urlencoded
 app.post("/auth/webhook/plusofon", async (c) => {
   try {
-    const body = (await c.req.json()) as Record<string, unknown>;
+    let body: Record<string, unknown>;
+
+    const contentType = c.req.header("content-type") || "";
+    console.log("[webhook] plusofon incoming, content-type:", contentType);
+
+    if (contentType.includes("application/json")) {
+      body = (await c.req.json()) as Record<string, unknown>;
+    } else if (contentType.includes("form-urlencoded")) {
+      const formData = await c.req.parseBody();
+      body = formData as Record<string, unknown>;
+    } else {
+      // Попробуем оба варианта
+      const rawText = await c.req.text();
+      console.log("[webhook] plusofon raw body:", rawText);
+      try {
+        body = JSON.parse(rawText) as Record<string, unknown>;
+      } catch {
+        // Парсим как query string: key=value&key2=value2
+        const params = new URLSearchParams(rawText);
+        body = {};
+        for (const [k, v] of params.entries()) {
+          body[k] = v;
+        }
+      }
+    }
+
+    console.log("[webhook] plusofon parsed body:", JSON.stringify(body));
     const ok = await handlePlusofonWebhook(body);
     return c.json({ ok });
   } catch (e) {
