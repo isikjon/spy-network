@@ -35,6 +35,12 @@ type PendingAuth = {
 
 const PENDING_TTL_MS = 5 * 60 * 1000; // 5 минут
 
+/**
+ * Тестовый номер для модерации сторов.
+ * Авторизация проходит автоматически без звонка.
+ */
+const TEST_PHONE = "71111111111"; // +7 111 111 11-11
+
 function pendingKey(phone: string): string {
   return `auth:pending:${phone}`;
 }
@@ -77,6 +83,30 @@ export const phoneAuthRouter = createTRPCRouter({
         return { ok: false as const, error: "INVALID_PHONE" as const };
       }
 
+      // Тестовый номер — мгновенная авторизация без Plusofon
+      if (phone === TEST_PHONE) {
+        console.log("[phone-auth] TEST PHONE — auto-verifying");
+        const pending: PendingAuth = {
+          userPhone: phone,
+          displayPhone: "8-111-111-11-11",
+          key: "test-key",
+          verified: true, // сразу verified
+          createdAt: Date.now(),
+          expiresAt: Date.now() + PENDING_TTL_MS,
+        };
+        await storeSet(pendingKey(phone), pending);
+
+        // Генерируем демо-данные если их ещё нет
+        await ensureTestData(phone);
+
+        return {
+          ok: true as const,
+          status: "requested" as const,
+          phone,
+          displayPhone: "8-111-111-11-11",
+        };
+      }
+
       // Антиспам: не чаще раза в 60 сек
       const existing = await storeGet<PendingAuth>(pendingKey(phone));
       if (existing && Date.now() < existing.expiresAt) {
@@ -87,7 +117,6 @@ export const phoneAuthRouter = createTRPCRouter({
             status: "already_requested" as const,
             phone,
             retryAfter: 60 - secondsAgo,
-            // Если вебхук уже пришёл — вернём номер
             displayPhone: existing.displayPhone,
           };
         }
@@ -203,6 +232,139 @@ export const phoneAuthRouter = createTRPCRouter({
     return { ok: true as const };
   }),
 });
+
+/**
+ * Генерация демо-данных для тестового аккаунта.
+ */
+async function ensureTestData(phone: string) {
+  const dataKey = `user:${phone}:data`;
+  const existing = await storeGet(dataKey);
+  if (existing) return; // данные уже есть
+
+  console.log("[phone-auth] generating demo data for test account");
+
+  const now = Date.now();
+  const day = 86400000;
+
+  const demoData = {
+    phoneNumber: phone,
+    dossiers: [
+      {
+        contact: {
+          id: "demo-1",
+          name: "Иванов Алексей Петрович",
+          phoneNumbers: ["+7 900 123-45-67"],
+          emails: ["ivanov@company.ru"],
+          company: "ООО «Альфа Групп»",
+          position: "Генеральный директор",
+          goal: "Стратегическое партнёрство",
+          notes: "Ключевой контакт для выхода на рынок B2B. Предпочитает личные встречи.",
+        },
+        sectors: ["business"],
+        functionalCircle: "productivity" as const,
+        importance: "critical" as const,
+        relations: [{ contactId: "demo-2", strength: 85, description: "Деловые партнёры" }],
+        diary: [
+          { id: "d1", date: new Date(now - 3 * day), type: "manual" as const, content: "Встреча в офисе. Обсудили условия контракта на Q2." },
+          { id: "d2", date: new Date(now - 10 * day), type: "manual" as const, content: "Звонок. Договорились о встрече на следующей неделе." },
+        ],
+        addedDate: new Date(now - 30 * day),
+        lastInteraction: new Date(now - 3 * day),
+        powerGrouping: { groupName: "Альфа Групп", suzerainId: undefined, vassalIds: ["demo-2", "demo-3"] },
+      },
+      {
+        contact: {
+          id: "demo-2",
+          name: "Петрова Мария Сергеевна",
+          phoneNumbers: ["+7 916 234-56-78"],
+          emails: ["petrova@alphagroup.ru"],
+          company: "ООО «Альфа Групп»",
+          position: "Финансовый директор",
+          goal: "Согласование бюджета проекта",
+          notes: "Отвечает за финансовые решения. Аналитический склад ума.",
+        },
+        sectors: ["business"],
+        functionalCircle: "productivity" as const,
+        importance: "high" as const,
+        relations: [{ contactId: "demo-1", strength: 85, description: "Работает с Ивановым" }],
+        diary: [
+          { id: "d3", date: new Date(now - 5 * day), type: "manual" as const, content: "Отправлены финансовые документы на согласование." },
+        ],
+        addedDate: new Date(now - 25 * day),
+        lastInteraction: new Date(now - 5 * day),
+      },
+      {
+        contact: {
+          id: "demo-3",
+          name: "Сидоров Дмитрий Олегович",
+          phoneNumbers: ["+7 925 345-67-89"],
+          emails: ["sidorov@techstart.io"],
+          company: "TechStart",
+          position: "CTO",
+          goal: "Техническая интеграция",
+          notes: "Отвечает за техническую часть. Быстро принимает решения.",
+        },
+        sectors: ["business", "other"],
+        functionalCircle: "development" as const,
+        importance: "high" as const,
+        relations: [
+          { contactId: "demo-1", strength: 60, description: "Знакомы через конференцию" },
+          { contactId: "demo-4", strength: 75, description: "Коллеги" },
+        ],
+        diary: [
+          { id: "d4", date: new Date(now - 7 * day), type: "manual" as const, content: "Созвон по API интеграции. Получили документацию." },
+        ],
+        addedDate: new Date(now - 20 * day),
+        lastInteraction: new Date(now - 7 * day),
+      },
+      {
+        contact: {
+          id: "demo-4",
+          name: "Козлова Анна Владимировна",
+          phoneNumbers: ["+7 903 456-78-90"],
+          emails: ["kozlova@media.ru"],
+          company: "MediaPro",
+          position: "Руководитель PR-отдела",
+          goal: "Медийное сопровождение",
+          notes: "Контакт для PR-кампаний. Широкая сеть в медиа-индустрии.",
+        },
+        sectors: ["personal", "other"],
+        functionalCircle: "support" as const,
+        importance: "medium" as const,
+        relations: [],
+        diary: [
+          { id: "d5", date: new Date(now - 14 * day), type: "manual" as const, content: "Обсудили медиаплан на весну." },
+        ],
+        addedDate: new Date(now - 15 * day),
+        lastInteraction: new Date(now - 14 * day),
+      },
+      {
+        contact: {
+          id: "demo-5",
+          name: "Николаев Игорь Анатольевич",
+          phoneNumbers: ["+7 977 567-89-01"],
+          emails: ["nikolaev@lawfirm.ru"],
+          company: "Юридическая фирма «Право»",
+          position: "Старший партнёр",
+          goal: "Юридическое сопровождение",
+          notes: "Опытный юрист. Помогает с договорами и сделками.",
+        },
+        sectors: ["business"],
+        functionalCircle: "support" as const,
+        importance: "medium" as const,
+        relations: [{ contactId: "demo-1", strength: 40, description: "Юрист Иванова" }],
+        diary: [],
+        addedDate: new Date(now - 10 * day),
+      },
+    ],
+    sectors: ["work", "business", "politics", "personal", "other"],
+    powerGroupings: ["Альфа Групп"],
+    updatedAt: now,
+  };
+
+  await storeSet(dataKey, demoData);
+  console.log("[phone-auth] demo data created: 5 contacts");
+}
 
 /**
  * Обработка вебхуков от Plusofon.
