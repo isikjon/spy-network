@@ -338,11 +338,20 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const logout = useCallback(async () => {
     setPhoneNumber(null);
+    setDossiers([]);
+    setSectors(DEFAULT_SECTORS);
+    setPowerGroupings(DEFAULT_POWER_GROUPINGS);
+    setSelfContactEnsuredForPhone(null);
+
     await AsyncStorage.multiRemove([
       STORAGE_KEYS.PHONE_NUMBER,
       STORAGE_KEYS.SESSION_TOKEN,
+      STORAGE_KEYS.APP_DATA_CACHE,
     ]);
-  }, []);
+
+    queryClient.removeQueries({ queryKey: ['appDataCache'] });
+    queryClient.removeQueries({ queryKey: ['trpc.appData.getMyData'] });
+  }, [queryClient]);
 
   const [selfContactEnsuredForPhone, setSelfContactEnsuredForPhone] = useState<string | null>(null);
 
