@@ -38,6 +38,15 @@ type PowerEdge = {
 
 const normalizePhone = (v: string) => v.replace(/\D+/g, "");
 
+/**
+ * Маскировка телефона для безопасности: 79184764713 → 7918***4713
+ */
+const maskPhone = (phone: string): string => {
+  const digits = normalizePhone(phone);
+  if (digits.length <= 6) return "***";
+  return digits.slice(0, 4) + "***" + digits.slice(-4);
+};
+
 const contactFromDossier = (ownerPhoneNumber: string, d: unknown): ContactLite | null => {
   const c = (d as any)?.contact;
   const pg = (d as any)?.powerGrouping;
@@ -286,7 +295,7 @@ export const adminRouter = createTRPCRouter({
         const stored = await storeGet<UserAppData>(`user:${phone}:data`);
         if (!stored) continue;
         users.push({
-          phoneNumber: stored.phoneNumber || phone,
+          phoneNumber: maskPhone(stored.phoneNumber || phone),
           dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
           updatedAt: typeof stored.updatedAt === "number" ? stored.updatedAt : 0,
         });
@@ -317,27 +326,32 @@ export const adminRouter = createTRPCRouter({
 
       const dossiers = Array.isArray(stored.dossiers) ? stored.dossiers : [];
 
+      // Безопасность: админы видят только агрегированные данные, без имён/телефонов/email
       const contacts = dossiers
         .map((d) => {
           const c = (d as any)?.contact;
           const rels = (d as any)?.relations;
+          const id = String(c?.id ?? "");
+          if (!id) return null;
+
           return {
-            id: String(c?.id ?? ""),
-            name: String(c?.name ?? ""),
-            phoneNumbers: Array.isArray(c?.phoneNumbers)
-              ? (c.phoneNumbers as unknown[]).map((x) => String(x))
-              : ([] as string[]),
-            emails: Array.isArray(c?.emails)
-              ? (c.emails as unknown[]).map((x) => String(x))
-              : ([] as string[]),
+            id,
             importance: String((d as any)?.importance ?? ""),
             functionalCircle: String((d as any)?.functionalCircle ?? ""),
             relationsCount: Array.isArray(rels) ? rels.length : 0,
+            hasPowerGrouping: !!(d as any)?.powerGrouping?.groupName,
+            sectorsCount: Array.isArray((d as any)?.sectors) ? ((d as any).sectors as unknown[]).length : 0,
+            diaryCount: Array.isArray((d as any)?.diary) ? ((d as any).diary as unknown[]).length : 0,
           };
         })
-        .filter((c) => c.id.length > 0 || c.name.length > 0);
+        .filter((c): c is NonNullable<typeof c> => c !== null);
 
-      return { ok: true as const, phoneNumber: stored.phoneNumber, contacts };
+      return {
+        ok: true as const,
+        phoneNumber: maskPhone(stored.phoneNumber),
+        contactsCount: contacts.length,
+        contacts,
+      };
     }),
 
   analyticsUserNetworkMap: publicProcedure
@@ -417,7 +431,7 @@ export const adminRouter = createTRPCRouter({
 
       return {
         ok: true as const,
-        phoneNumber: stored.phoneNumber,
+        phoneNumber: maskPhone(stored.phoneNumber),
         updatedAt: stored.updatedAt,
         dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
         sectors: Array.isArray(stored.sectors) ? stored.sectors : [],
@@ -476,7 +490,16 @@ export const adminRouter = createTRPCRouter({
       }
 
       const limit = input?.limit ?? 120;
-      const contacts = Array.from(contactsMap.values()).slice(0, limit);
+      const rawContacts = Array.from(contactsMap.values()).slice(0, limit);
+
+      // Безопасность: маскируем персональные данные
+      const contacts = rawContacts.map((c) => ({
+        id: c.id,
+        ownerPhoneNumber: maskPhone(c.ownerPhoneNumber),
+        groupName: c.groupName,
+        suzerainId: c.suzerainId,
+        vassalIds: c.vassalIds,
+      }));
 
       return { ok: true as const, contacts };
     }),

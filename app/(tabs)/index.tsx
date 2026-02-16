@@ -1,4 +1,5 @@
 import { useApp } from '@/contexts/AppContext';
+import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
 import { Plus, Search, Shield, FileText, Users, X } from 'lucide-react-native';
 import { useState } from 'react';
@@ -20,7 +21,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ContactDossier } from '@/types';
 
 export default function DossiersScreen() {
-  const { dossiers, addDossier, theme, t } = useApp();
+  const { dossiers, addDossier, theme, t, phoneNumber, currentLanguage } = useApp();
+
+  const levelQuery = trpc.appData.getMyLevel.useQuery(undefined, {
+    enabled: !!phoneNumber,
+    staleTime: 30_000,
+  });
+  const userLevel = levelQuery.data?.ok ? levelQuery.data.level : 1;
+  const maxContacts = levelQuery.data?.ok ? levelQuery.data.maxContacts : 20;
+  const isAtLimit = maxContacts !== null && dossiers.length >= maxContacts;
   const [search, setSearch] = useState('');
   const [showContactsModal, setShowContactsModal] = useState(false);
   const [phoneContacts, setPhoneContacts] = useState<Contacts.Contact[]>([]);
@@ -49,6 +58,8 @@ export default function DossiersScreen() {
   });
 
   const loadContacts = async () => {
+    if (!checkLimitAndWarn()) return;
+
     if (Platform.OS === 'web') {
       Alert.alert(t.dossiers.notAvailable, t.dossiers.contactAccessWeb);
       return;
@@ -74,7 +85,23 @@ export default function DossiersScreen() {
     }
   };
 
+  const checkLimitAndWarn = (): boolean => {
+    if (isAtLimit) {
+      Alert.alert(
+        currentLanguage === 'ru' ? 'ЛИМИТ КОНТАКТОВ' : 'CONTACT LIMIT',
+        currentLanguage === 'ru'
+          ? `Достигнут лимит ${maxContacts} контактов. Получите ДОПУСК уровня 2 в профиле для снятия ограничения.`
+          : `Reached the limit of ${maxContacts} contacts. Get Level 2 ACCESS in profile to remove the limit.`,
+        [{ text: 'OK', style: 'default' }]
+      );
+      return false;
+    }
+    return true;
+  };
+
   const handleSelectPhoneContact = (contact: Contacts.Contact) => {
+    if (!checkLimitAndWarn()) return;
+
     const newDossier: ContactDossier = {
       contact: {
         id: `contact_${Date.now()}`,
@@ -106,6 +133,8 @@ export default function DossiersScreen() {
   };
 
   const handleAddMockContact = () => {
+    if (!checkLimitAndWarn()) return;
+
     const mockContact: ContactDossier = {
       contact: {
         id: `contact_${Date.now()}`,

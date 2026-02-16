@@ -1,6 +1,7 @@
 import { useApp } from '@/contexts/AppContext';
+import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle } from 'lucide-react-native';
 import Tutorial from '@/components/Tutorial';
 import {
   StyleSheet,
@@ -27,7 +28,32 @@ export default function ProfileScreen() {
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
 
+  // Запрос уровня пользователя
+  const levelQuery = trpc.appData.getMyLevel.useQuery(undefined, {
+    enabled: !!phoneNumber,
+    staleTime: 30_000,
+  });
+
+  const userLevel = levelQuery.data?.ok ? levelQuery.data.level : 1;
+  const maxContacts = levelQuery.data?.ok ? levelQuery.data.maxContacts : 20;
+  const currentContacts = dossiers.length;
+  const showAds = levelQuery.data?.ok ? levelQuery.data.showAds : true;
+  const subscribedUntil = levelQuery.data?.ok ? levelQuery.data.subscribedUntil : null;
+  const isAtLimit = maxContacts !== null && currentContacts >= maxContacts;
+
   const styles = createStyles(theme);
+
+  const handleGetAccess = () => {
+    Alert.alert(
+      currentLanguage === 'ru' ? 'ПОЛУЧИТЬ ДОПУСК' : 'GET ACCESS',
+      currentLanguage === 'ru'
+        ? 'Уровень 2 снимает лимит контактов и убирает рекламу. Подписка 99 руб./неделя. Оформить можно в веб-версии.'
+        : 'Level 2 removes the contact limit and ads. Subscription 99 RUB/week. Available in the web version.',
+      [
+        { text: 'OK', style: 'default' },
+      ]
+    );
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -197,14 +223,65 @@ export default function ProfileScreen() {
               <Text style={styles.infoValue}>{t.profile.statusValue}</Text>
             </View>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>{t.profile.clearance}</Text>
-              <Text style={styles.infoValue}>{t.profile.clearanceValue}</Text>
+              <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'ДОПУСК' : 'CLEARANCE'}</Text>
+              <Text style={[styles.infoValue, userLevel >= 2 && { color: theme.primary }]}>
+                {currentLanguage === 'ru'
+                  ? (userLevel >= 2 ? 'УРОВЕНЬ 2 (ПРЕМИУМ)' : 'УРОВЕНЬ 1 (СТАНДАРТ)')
+                  : (userLevel >= 2 ? 'LEVEL 2 (PREMIUM)' : 'LEVEL 1 (STANDARD)')}
+              </Text>
             </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'КОНТАКТЫ' : 'CONTACTS'}</Text>
+              <Text style={[styles.infoValue, isAtLimit && { color: theme.danger }]}>
+                {maxContacts !== null
+                  ? `${currentContacts} / ${maxContacts}`
+                  : `${currentContacts} / ∞`}
+              </Text>
+            </View>
+            {subscribedUntil && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'ПОДПИСКА ДО' : 'SUBSCRIBED UNTIL'}</Text>
+                <Text style={styles.infoValue}>
+                  {new Date(subscribedUntil).toLocaleDateString(currentLanguage === 'ru' ? 'ru-RU' : 'en-US')}
+                </Text>
+              </View>
+            )}
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>{t.profile.encryption}</Text>
               <Text style={styles.infoValue}>{t.profile.encryptionValue}</Text>
             </View>
           </View>
+
+          {userLevel < 2 && (
+            <TouchableOpacity
+              style={styles.accessButton}
+              onPress={handleGetAccess}
+              activeOpacity={0.7}
+            >
+              <Crown size={20} color={theme.primary} strokeWidth={1.5} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.accessButtonTitle}>
+                  {currentLanguage === 'ru' ? 'ПОЛУЧИТЬ ДОПУСК' : 'GET ACCESS'}
+                </Text>
+                <Text style={styles.accessButtonSubtitle}>
+                  {currentLanguage === 'ru'
+                    ? 'Безлимит контактов, без рекламы — 99 руб./нед.'
+                    : 'Unlimited contacts, no ads — 99 RUB/week'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {isAtLimit && (
+            <View style={styles.limitWarning}>
+              <AlertTriangle size={16} color={theme.danger} strokeWidth={1.5} />
+              <Text style={styles.limitWarningText}>
+                {currentLanguage === 'ru'
+                  ? `Лимит контактов достигнут (${maxContacts}). Получите ДОПУСК уровня 2 для снятия ограничения.`
+                  : `Contact limit reached (${maxContacts}). Get Level 2 ACCESS to remove the limit.`}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.themeContainer}>
             <View style={styles.themeHeader}>
@@ -697,6 +774,49 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontFamily: 'monospace' as const,
     fontWeight: '700' as const,
     letterSpacing: 1,
+  },
+  accessButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.primary,
+    backgroundColor: theme.overlay,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 16,
+    marginBottom: 20,
+  },
+  accessButtonTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  accessButtonSubtitle: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    marginTop: 4,
+    letterSpacing: 0.5,
+  },
+  limitWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.danger,
+    backgroundColor: theme.overlay,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+    marginBottom: 20,
+  },
+  limitWarningText: {
+    flex: 1,
+    fontSize: 11,
+    color: theme.danger,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 0.5,
   },
   tutorialButton: {
     flexDirection: 'row',

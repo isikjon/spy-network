@@ -6,6 +6,7 @@ import {
   getAdminAuthEnabled,
   verifyAdminPassword,
 } from "./trpc/utils/admin-auth";
+import { createBackup } from "./backup";
 
 type UserAppData = {
   phoneNumber: string;
@@ -21,6 +22,12 @@ const userKeyToPhone = (key: string): string | null => {
   if (parts[0] !== "user") return null;
   if (parts[2] !== "data") return null;
   return parts[1] || null;
+};
+
+const maskPhone = (phone: string): string => {
+  const digits = (phone || "").replace(/\D+/g, "");
+  if (digits.length <= 6) return "***";
+  return digits.slice(0, 4) + "***" + digits.slice(-4);
 };
 
 export const adminApi = new Hono();
@@ -88,7 +95,7 @@ adminApi.get("/admin-api/users", async (c) => {
     const stored = await storeGet<UserAppData>(`user:${phone}:data`);
     if (!stored) continue;
     users.push({
-      phoneNumber: stored.phoneNumber || phone,
+      phoneNumber: maskPhone(stored.phoneNumber || phone),
       dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
       updatedAt: typeof stored.updatedAt === "number" ? stored.updatedAt : 0,
     });
@@ -114,25 +121,42 @@ adminApi.get("/admin-api/users/:phone", async (c) => {
     return c.json({ ok: false, error: "NOT_FOUND" }, 404);
   }
   const dossiers = Array.isArray(stored.dossiers) ? stored.dossiers : [];
+  // Безопасность: админы видят только агрегированные данные
   const contacts = dossiers.map((d: unknown) => {
     const doc = d as Record<string, unknown>;
     const c = (doc?.contact as Record<string, unknown>) ?? {};
     const rels = (doc?.relations as unknown[]) ?? [];
     return {
       id: String(c?.id ?? ""),
-      name: String(c?.name ?? ""),
-      phoneNumbers: Array.isArray(c?.phoneNumbers) ? (c.phoneNumbers as unknown[]).map(String) : [],
-      emails: Array.isArray(c?.emails) ? (c.emails as unknown[]).map(String) : [],
+      importance: String((doc?.importance as string) ?? ""),
+      functionalCircle: String((doc?.functionalCircle as string) ?? ""),
       relationsCount: rels.length,
     };
   });
   return c.json({
     ok: true,
-    phoneNumber: stored.phoneNumber,
+    phoneNumber: maskPhone(stored.phoneNumber),
     updatedAt: stored.updatedAt,
     dossiersCount: dossiers.length,
     sectors: Array.isArray(stored.sectors) ? stored.sectors : [],
     powerGroupings: Array.isArray(stored.powerGroupings) ? stored.powerGroupings : [],
     contacts,
   });
+});
+
+// Ручной бэкап базы данных (только для админов)
+adminApi.post("/admin-api/backup", async (c) => {
+  const user = await getAdminFromRequest(c.req.raw);
+  if (!user) {
+    return c.json({ ok: false, error: "UNAUTHENTICATED" }, 401);
+  }
+  if (user.role !== "admin") {
+    return c.json({ ok: false, error: "FORBIDDEN" }, 403);
+  }
+  try {
+    await createBackup();
+    return c.json({ ok: true, message: "Backup created" });
+  } catch (e) {
+    return c.json({ ok: false, error: "BACKUP_FAILED" }, 500);
+  }
 });
