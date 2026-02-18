@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Вход в панель администратора - Spy Network</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="pages.css">
+    <link rel="icon" type="image/png" href="favicon.png">
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div class="grid-overlay"></div>
+    
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="logo">
+                <span class="logo-icon">◆</span>
+                <span class="logo-text">SPY NETWORK</span>
+            </a>
+            <div class="nav-links">
+                <a href="index.html">ГЛАВНАЯ</a>
+                <a href="privacy.html">КОНФИДЕНЦИАЛЬНОСТЬ</a>
+                <a href="support.html">ПОДДЕРЖКА</a>
+                <a href="/admin" class="nav-admin active">ADMIN</a>
+            </div>
+            <button class="mobile-menu-btn" onclick="toggleMenu()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html">ГЛАВНАЯ</a>
+        <a href="privacy.html">КОНФИДЕНЦИАЛЬНОСТЬ</a>
+        <a href="support.html">ПОДДЕРЖКА</a>
+        <a href="/admin">ADMIN</a>
+    </div>
+
+    <main class="page-content">
+        <div class="admin-container">
+            <div class="admin-box">
+                <div class="admin-header">
+                    <div class="admin-icon">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                    </div>
+                    <h1>ДОСТУП К СИСТЕМЕ</h1>
+                    <p>Введите учётные данные администратора</p>
+                </div>
+
+                <form class="admin-form" id="adminForm" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="username">ИДЕНТИФИКАТОР</label>
+                        <input 
+                            type="text" 
+                            id="username" 
+                            name="username" 
+                            placeholder="admin"
+                            autocomplete="username"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">КОД ДОСТУПА</label>
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password" 
+                            placeholder="••••••••"
+                            autocomplete="current-password"
+                            required
+                        >
+                        <div class="form-error" id="loginError">НЕВЕРНЫЕ УЧЁТНЫЕ ДАННЫЕ</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                            <polyline points="10 17 15 12 10 7"/>
+                            <line x1="15" y1="12" x2="3" y2="12"/>
+                        </svg>
+                        ВОЙТИ В СИСТЕМУ
+                    </button>
+
+                    <div class="status-indicator">
+                        <span class="dot"></span>
+                        <span>СИСТЕМА ЗАЩИЩЕНА</span>
+                    </div>
+                </form>
+
+                <div class="admin-footer">
+                    <a href="index.html">← Вернуться на главную</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Настройки: порт Expo и админка бэкенда (работает без приложения)
+        var APP_PORT = 8081;
+        var BACKEND_ADMIN_URL = 'https://spynetwork.ru/admin';
+
+        function toggleMenu() {
+            document.getElementById('mobileMenu').classList.toggle('active');
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorEl = document.getElementById('loginError');
+            const submitBtn = document.getElementById('submitBtn');
+            
+            submitBtn.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                </svg>
+                ПРОВЕРКА...
+            `;
+            submitBtn.disabled = true;
+            errorEl.classList.remove('visible');
+
+            setTimeout(() => {
+                // Redirect to admin panel in the app
+                // The actual authentication is handled by the app's admin route
+                const adminUrl = getAdminUrl();
+                window.location.href = adminUrl + '?username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password);
+            }, 1000);
+        }
+
+        function getAdminUrl() {
+            var hostname = window.location.hostname;
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return 'http://localhost:' + APP_PORT + '/admin';
+            }
+            // На домене/сервере — админка на том же хосте, без порта
+            return window.location.origin + '/admin';
+        }
+
+        // Add spin animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
