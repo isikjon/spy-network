@@ -45,3 +45,10 @@ yarn-error.*
 rork-eslint.config.js
 
 ChatExport_2026-02-16
+ChatExport_2026-02-19
+
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite

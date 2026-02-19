@@ -26,11 +26,22 @@ const USER_PHONE_STORAGE_KEY = "user_phone" as const;
 const USER_SESSION_TOKEN_KEY = "user_session_token" as const;
 const ADMIN_TOKEN_STORAGE_KEY = "admin_auth_token" as const;
 
+const REQUEST_TIMEOUT_MS = 15000;
+
+const fetchWithTimeout = (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() =>
+    clearTimeout(timeout),
+  );
+};
+
 export const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: `${getBaseUrl()}/api/trpc`,
       transformer: superjson,
+      fetch: fetchWithTimeout,
       headers: async () => {
         try {
           const [phone, sessionToken, adminToken] = await Promise.all([

@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -11,60 +12,87 @@ export type JsonValue =
 
 export type StoredValue = unknown;
 
-type StoreRecord = {
-  value: StoredValue;
-  updatedAt: number;
-};
+let db: Database;
 
-const memoryStore: Map<string, StoreRecord> = new Map();
-
-const getStorePath = (): string => {
+const getDbPath = (): string => {
   const env = process.env.STORE_PATH;
-  if (env && typeof env === "string" && env.trim()) return env.trim();
-  return path.join(process.cwd(), "data", "store.json");
+  if (env && typeof env === "string" && env.trim()) {
+    return env.trim().replace(/\.json$/, ".db");
+  }
+  return path.join(process.cwd(), "data", "store.db");
 };
 
-let persistScheduled: ReturnType<typeof setTimeout> | null = null;
-const PERSIST_DEBOUNCE_MS = 500;
-
-function schedulePersist(): void {
-  if (persistScheduled) return;
-  persistScheduled = setTimeout(() => {
-    persistScheduled = null;
-    persistToFile().catch((e) => console.error("[store] persist failed", e));
-  }, PERSIST_DEBOUNCE_MS);
-}
-
-async function persistToFile(): Promise<void> {
-  const filePath = getStorePath();
-  const dir = path.dirname(filePath);
-  try {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const obj: Record<string, StoreRecord> = {};
-    for (const [k, v] of memoryStore) obj[k] = v;
-    fs.writeFileSync(filePath, JSON.stringify(obj, null, 0), "utf8");
-  } catch (e) {
-    console.error("[store] persistToFile error", e);
-  }
+export function getDatabase(): Database {
+  return db;
 }
 
 export async function initStore(): Promise<void> {
-  const filePath = getStorePath();
+  const dbPath = getDbPath();
+  const dir = path.dirname(dbPath);
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  db = new Database(dbPath);
+
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA synchronous = NORMAL");
+  db.exec("PRAGMA busy_timeout = 5000");
+  db.exec("PRAGMA cache_size = -20000");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS kv (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
+  db.exec("CREATE INDEX IF NOT EXISTS idx_kv_prefix ON kv (key)");
+
+  await migrateFromJson(dbPath);
+
+  const row = db.prepare("SELECT COUNT(*) as cnt FROM kv").get() as { cnt: number };
+  console.log("[store] SQLite initialized", dbPath, "keys:", row.cnt);
+}
+
+async function migrateFromJson(dbPath: string): Promise<void> {
+  const jsonPath = dbPath.replace(/\.db$/, ".json");
+  if (!fs.existsSync(jsonPath)) return;
+
+  const row = db.prepare("SELECT COUNT(*) as cnt FROM kv").get() as { cnt: number };
+  if (row.cnt > 0) {
+    console.log("[store] SQLite already has data, skipping JSON migration");
+    return;
+  }
+
+  console.log("[store] migrating from store.json...");
+
   try {
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, "utf8");
-      const obj = JSON.parse(raw) as Record<string, StoreRecord>;
-      for (const [k, v] of Object.entries(obj)) {
-        if (v && typeof v === "object" && "value" in v) {
-          memoryStore.set(k, { value: v.value, updatedAt: v.updatedAt ?? Date.now() });
+    const raw = fs.readFileSync(jsonPath, "utf8");
+    const obj = JSON.parse(raw) as Record<string, { value: unknown; updatedAt?: number }>;
+
+    const insert = db.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, ?)");
+    const migrate = db.transaction(() => {
+      let count = 0;
+      for (const [key, record] of Object.entries(obj)) {
+        if (record && typeof record === "object" && "value" in record) {
+          insert.run(key, JSON.stringify(record.value), record.updatedAt ?? Date.now());
+          count++;
         }
       }
-      console.log("[store] loaded from file", filePath, "keys:", memoryStore.size);
-    }
+      return count;
+    });
+
+    const migrated = migrate();
+    console.log("[store] migrated", migrated, "keys from store.json");
+
+    const backupJson = jsonPath + ".migrated";
+    fs.renameSync(jsonPath, backupJson);
+    console.log("[store] renamed store.json ->", path.basename(backupJson));
   } catch (e) {
-    console.warn("[store] load from file failed, starting empty", e);
+    console.error("[store] JSON migration failed", e);
   }
 }
 
@@ -72,11 +100,10 @@ const hasRorkDbEnv = () => {
   const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
   const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
   const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
   return !!endpoint && !!namespace && !!token;
 };
 
-async function rorkDbFetch<T>(path: string, init: RequestInit): Promise<T> {
+async function rorkDbFetch<T>(p: string, init: RequestInit): Promise<T> {
   const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
   const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
   const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
@@ -85,7 +112,7 @@ async function rorkDbFetch<T>(path: string, init: RequestInit): Promise<T> {
     throw new Error("Missing Rork DB env vars");
   }
 
-  const url = `${endpoint.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+  const url = `${endpoint.replace(/\/$/, "")}/${p.replace(/^\//, "")}`;
 
   const res = await fetch(url, {
     ...init,
@@ -99,11 +126,7 @@ async function rorkDbFetch<T>(path: string, init: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const text = await res.text();
-    console.log("[backend][store] rorkDbFetch failed", {
-      url,
-      status: res.status,
-      text,
-    });
+    console.log("[store] rorkDbFetch failed", { url, status: res.status, text });
     throw new Error(`Rork DB request failed: ${res.status}`);
   }
 
@@ -121,12 +144,18 @@ export async function storeGet<T>(key: string): Promise<T | null> {
       });
       return (data?.value ?? null) as T | null;
     } catch (e) {
-      console.log("[backend][store] falling back to memory on get", { key, e });
+      console.log("[store] Rork DB fallback on get", { key });
     }
   }
 
-  const rec = memoryStore.get(key);
-  return (rec?.value ?? null) as T | null;
+  const row = db.prepare("SELECT value FROM kv WHERE key = ?").get(key) as { value: string } | null;
+  if (!row) return null;
+
+  try {
+    return JSON.parse(row.value) as T;
+  } catch {
+    return null;
+  }
 }
 
 export async function storeSet<T>(key: string, value: T): Promise<void> {
@@ -140,12 +169,15 @@ export async function storeSet<T>(key: string, value: T): Promise<void> {
       });
       return;
     } catch (e) {
-      console.log("[backend][store] falling back to memory on set", { key, e });
+      console.log("[store] Rork DB fallback on set", { key });
     }
   }
 
-  memoryStore.set(key, { value, updatedAt: Date.now() });
-  schedulePersist();
+  db.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, ?)").run(
+    key,
+    JSON.stringify(value),
+    Date.now(),
+  );
 }
 
 export async function storeDelete(key: string): Promise<void> {
@@ -159,25 +191,33 @@ export async function storeDelete(key: string): Promise<void> {
       });
       return;
     } catch (e) {
-      console.log("[backend][store] falling back to memory on delete", { key, e });
+      console.log("[store] Rork DB fallback on delete", { key });
     }
   }
 
-  memoryStore.delete(key);
-  schedulePersist();
+  db.prepare("DELETE FROM kv WHERE key = ?").run(key);
 }
 
-/**
- * Получить все записи по префиксу ключа.
- * Возвращает объект: { "key1": value1, "key2": value2, ... }
- */
 export async function storeGetAll<T>(prefix: string): Promise<Record<string, T>> {
   const result: Record<string, T> = {};
-  const keys = await storeListKeys(prefix);
-  for (const key of keys) {
-    const val = await storeGet<T>(key);
-    if (val !== null) {
-      result[key] = val;
+
+  if (hasRorkDbEnv()) {
+    try {
+      const keys = await storeListKeys(prefix);
+      for (const key of keys) {
+        const val = await storeGet<T>(key);
+        if (val !== null) result[key] = val;
+      }
+      return result;
+    } catch {
+    }
+  }
+
+  const rows = db.prepare("SELECT key, value FROM kv WHERE key LIKE ?").all(prefix + "%") as { key: string; value: string }[];
+  for (const row of rows) {
+    try {
+      result[row.key] = JSON.parse(row.value) as T;
+    } catch {
     }
   }
   return result;
@@ -192,16 +232,10 @@ export async function storeListKeys(prefix: string): Promise<string[]> {
       });
       return data?.keys ?? [];
     } catch (e) {
-      console.log("[backend][store] falling back to memory on listKeys", {
-        prefix,
-        e,
-      });
+      console.log("[store] Rork DB fallback on listKeys", { prefix });
     }
   }
 
-  const keys: string[] = [];
-  for (const k of memoryStore.keys()) {
-    if (k.startsWith(prefix)) keys.push(k);
-  }
-  return keys;
+  const rows = db.prepare("SELECT key FROM kv WHERE key LIKE ?").all(prefix + "%") as { key: string }[];
+  return rows.map((r) => r.key);
 }

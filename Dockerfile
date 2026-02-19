@@ -1,22 +1,16 @@
-FROM node:18-alpine
+FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install --legacy-peer-deps
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile 2>/dev/null || bun install
 
-COPY . .
-
-RUN npx tsc \
-  --skipLibCheck \
-  --outDir dist \
-  --module commonjs \
-  --moduleResolution node \
-  --target ES2020 \
-  --lib ES2020,DOM \
-  backend/server.ts
+COPY backend/ ./backend/
+COPY web/ ./web/
 
 RUN mkdir -p /app/data
 VOLUME /app/data
+
 EXPOSE 3000
-CMD ["node", "dist/backend/server.js"]
+
+CMD ["bun", "run", "backend/server.ts"]

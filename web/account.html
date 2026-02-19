@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Spy Network - Личный кабинет. Управление подпиской и уровнем допуска.">
+    <title>Личный кабинет - Spy Network</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="pages.css">
+    <link rel="icon" type="image/png" href="favicon.png">
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div class="grid-overlay"></div>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">
+                <span class="logo-icon">◆</span>
+                <a href="index.html" class="logo-text" style="text-decoration:none;color:var(--text)">SPY NETWORK</a>
+            </div>
+            <div class="nav-links">
+                <a href="index.html">ГЛАВНАЯ</a>
+                <a href="subscription.html">ПОДПИСКА</a>
+                <a href="account.html" class="active">КАБИНЕТ</a>
+                <a href="support.html">ПОДДЕРЖКА</a>
+                <a href="/admin" class="nav-admin">ADMIN</a>
+            </div>
+            <button class="mobile-menu-btn" onclick="toggleMenu()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html">ГЛАВНАЯ</a>
+        <a href="subscription.html">ПОДПИСКА</a>
+        <a href="account.html">КАБИНЕТ</a>
+        <a href="support.html">ПОДДЕРЖКА</a>
+        <a href="/admin">ADMIN</a>
+    </div>
+
+    <div class="page-content">
+
+        <!-- AUTH SCREEN -->
+        <div id="authScreen" class="account-screen">
+            <div class="account-auth-container">
+                <div class="account-auth-box">
+                    <div class="account-auth-header">
+                        <div class="account-auth-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                        </div>
+                        <h1>ВХОД В СИСТЕМУ</h1>
+                        <p>CLASSIFIED ACCESS — АВТОРИЗАЦИЯ</p>
+                    </div>
+
+                    <!-- Step 1: Phone input -->
+                    <div id="stepPhone" class="auth-step">
+                        <div class="account-auth-form">
+                            <div class="form-group">
+                                <label>НОМЕР ТЕЛЕФОНА</label>
+                                <div class="phone-input-wrap">
+                                    <span class="phone-prefix">+7</span>
+                                    <input type="tel" id="phoneInput" placeholder="XXX-XXX-XX-XX" maxlength="13" autocomplete="tel">
+                                </div>
+                            </div>
+                            <button class="btn btn-auth" id="btnRequestCall" onclick="requestCall()" disabled>
+                                <span id="btnRequestText">> ЗАПРОСИТЬ ЗВОНОК</span>
+                                <span id="btnRequestLoader" class="auth-loader" style="display:none"></span>
+                            </button>
+                            <p class="auth-hint">Вам будет показан номер, на который нужно позвонить для подтверждения.</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Calling -->
+                    <div id="stepCalling" class="auth-step" style="display:none">
+                        <div class="calling-container">
+                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                            </svg>
+                            <h2>ПОЗВОНИТЕ НА НОМЕР</h2>
+                            <p class="calling-subtitle">Нажмите на номер, чтобы позвонить</p>
+                            <a id="displayPhoneLink" href="#" class="display-phone-btn">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                                </svg>
+                                <span id="displayPhoneText"></span>
+                            </a>
+                            <div class="waiting-row">
+                                <span class="auth-loader-small"></span>
+                                <span>Ожидаем подтверждение...</span>
+                            </div>
+                            <p id="retryTimer" class="retry-text" style="display:none"></p>
+                        </div>
+                        <button class="btn-link" onclick="resetAuth()">← ВВЕСТИ ДРУГОЙ НОМЕР</button>
+                    </div>
+
+                    <!-- Step 3: Error -->
+                    <div id="stepError" class="auth-step" style="display:none">
+                        <div class="calling-container">
+                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.5">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                <line x1="12" y1="9" x2="12" y2="13"/>
+                                <line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            <h2 style="color:var(--danger)">ОШИБКА</h2>
+                            <p id="errorMessage" class="calling-subtitle"></p>
+                        </div>
+                        <button class="btn btn-auth" onclick="resetAuth()">> ПОПРОБОВАТЬ СНОВА</button>
+                    </div>
+
+                    <div class="account-auth-footer">
+                        <div class="status-indicator">
+                            <span class="dot"></span>
+                            <span>SECURE CONNECTION</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DASHBOARD SCREEN -->
+        <div id="dashboardScreen" class="account-screen" style="display:none">
+            <div class="dashboard-container">
+                <div class="dashboard-header">
+                    <div class="status-line" style="justify-content:center;">
+                        <span class="status-dot"></span>
+                        <span>ЛИЧНЫЙ КАБИНЕТ</span>
+                    </div>
+                    <h1>ПРОФИЛЬ АГЕНТА</h1>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="dashboard-profile-card">
+                        <div class="profile-icon-wrap">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                        </div>
+                        <h3>АГЕНТ</h3>
+                        <p id="dashPhone" class="profile-phone"></p>
+                        <button class="btn-logout" onclick="handleLogout()">ЗАВЕРШИТЬ СЕССИЮ</button>
+                    </div>
+
+                    <div class="dashboard-status-card">
+                        <h3>СТАТУС СИСТЕМЫ</h3>
+                        <div class="status-rows">
+                            <div class="status-row">
+                                <span class="status-label">ДОПУСК</span>
+                                <span id="dashLevel" class="status-val"></span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">КОНТАКТЫ</span>
+                                <span id="dashContacts" class="status-val"></span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">РЕКЛАМА</span>
+                                <span id="dashAds" class="status-val"></span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">ПОДПИСКА</span>
+                                <span id="dashSubscription" class="status-val"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Subscription CTA for Level 1 -->
+                <div id="subscriptionCTA" class="subscription-cta" style="display:none">
+                    <div class="cta-content">
+                        <div class="cta-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M2 4l3 12h14l3-12-5.5 7L12 2l-4.5 9L2 4z"/>
+                                <path d="M3 20h18"/>
+                            </svg>
+                        </div>
+                        <div class="cta-text">
+                            <h3>ПОВЫСИТЬ ДОПУСК ДО УРОВНЯ 2</h3>
+                            <p>Безлимит контактов, без рекламы — 99 ₽ / неделя</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-subscribe" onclick="handleSubscribe()">
+                        ОФОРМИТЬ ПОДПИСКУ — 99 ₽/НЕД.
+                    </button>
+                    <p class="cta-legal">
+                        Подписка продлевается автоматически. Отмена в любой момент.
+                        <a href="terms.html">Условия</a> · <a href="privacy.html">Конфиденциальность</a>
+                    </p>
+                </div>
+
+                <!-- Active subscription info for Level 2 -->
+                <div id="subscriptionActive" class="subscription-active" style="display:none">
+                    <div class="active-header">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        <h3>ПОДПИСКА АКТИВНА</h3>
+                    </div>
+                    <p id="subscriptionUntil" class="active-until"></p>
+                    <button class="btn-cancel-sub" onclick="handleCancelSubscription()">ОТМЕНИТЬ ПОДПИСКУ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-brand">
+                <div class="logo">
+                    <span class="logo-icon">◆</span>
+                    <span class="logo-text">SPY NETWORK</span>
+                </div>
+                <p>Профессиональное управление сетью контактов</p>
+            </div>
+            <div class="footer-links">
+                <div class="footer-column">
+                    <h4>ПРИЛОЖЕНИЕ</h4>
+                    <a href="index.html#features">Функции</a>
+                    <a href="subscription.html">Подписка</a>
+                    <a href="https://apps.apple.com" target="_blank">App Store</a>
+                    <a href="https://play.google.com" target="_blank">Google Play</a>
+                </div>
+                <div class="footer-column">
+                    <h4>ПРАВОВАЯ ИНФОРМАЦИЯ</h4>
+                    <a href="privacy.html">Политика конфиденциальности</a>
+                    <a href="terms.html">Условия использования</a>
+                </div>
+                <div class="footer-column">
+                    <h4>ПОДДЕРЖКА</h4>
+                    <a href="support.html">Центр поддержки</a>
+                    <a href="mailto:support@spynetwork.app">support@spynetwork.app</a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2024 Spy Network. Все права защищены.</p>
+            <p class="footer-version">v1.0.2 | СИСТЕМА АКТИВНА</p>
+        </div>
+    </footer>
+
+    <script>
+        var API_BASE = 'https://spynetwork.ru/api/trpc';
+        var STORAGE_TOKEN = 'spy_session_token';
+        var STORAGE_PHONE = 'spy_user_phone';
+        var pollInterval = null;
+        var currentPhone = '';
+
+        function toggleMenu() {
+            document.getElementById('mobileMenu').classList.toggle('active');
+        }
+
+        document.querySelectorAll('.mobile-menu a').forEach(function(link) {
+            link.addEventListener('click', function() {
+                document.getElementById('mobileMenu').classList.remove('active');
+            });
+        });
+
+        function formatPhoneInput(raw) {
+            var digits = raw.replace(/[^0-9]/g, '').slice(0, 10);
+            if (digits.length === 0) return '';
+            if (digits.length <= 3) return digits;
+            if (digits.length <= 6) return digits.slice(0, 3) + '-' + digits.slice(3);
+            if (digits.length <= 8) return digits.slice(0, 3) + '-' + digits.slice(3, 6) + '-' + digits.slice(6);
+            return digits.slice(0, 3) + '-' + digits.slice(3, 6) + '-' + digits.slice(6, 8) + '-' + digits.slice(8);
+        }
+
+        var phoneInput = document.getElementById('phoneInput');
+        phoneInput.addEventListener('input', function() {
+            var raw = this.value.replace(/[^0-9]/g, '');
+            this.value = formatPhoneInput(raw);
+            var btn = document.getElementById('btnRequestCall');
+            btn.disabled = raw.length < 10;
+        });
+
+        phoneInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') requestCall();
+        });
+
+        function getFullPhone() {
+            return '7' + phoneInput.value.replace(/[^0-9]/g, '');
+        }
+
+        async function trpcMutation(procedure, input) {
+            var res = await fetch(API_BASE + '/' + procedure + '?batch=1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ '0': { json: input } })
+            });
+            var data = await res.json();
+            return data[0].result.data.json;
+        }
+
+        async function trpcQuery(procedure, input, token, phone) {
+            var params = 'batch=1';
+            if (input !== undefined && input !== null) {
+                params += '&input=' + encodeURIComponent(JSON.stringify({ '0': { json: input } }));
+            } else {
+                params += '&input=' + encodeURIComponent(JSON.stringify({ '0': { json: null } }));
+            }
+            var headers = {};
+            if (token) headers['x-user-auth'] = 'Bearer ' + token;
+            else if (phone) headers['x-user-phone'] = phone;
+
+            var res = await fetch(API_BASE + '/' + procedure + '?' + params, {
+                method: 'GET',
+                headers: headers
+            });
+            var data = await res.json();
+            return data[0].result.data.json;
+        }
+
+        async function requestCall() {
+            var phone = getFullPhone();
+            if (phone.length < 11) return;
+
+            currentPhone = phone;
+            var btn = document.getElementById('btnRequestCall');
+            document.getElementById('btnRequestText').style.display = 'none';
+            document.getElementById('btnRequestLoader').style.display = 'inline-block';
+            btn.disabled = true;
+
+            try {
+                var result = await trpcMutation('phoneAuth.requestCall', { phone: phone });
+
+                if (result.ok) {
+                    if (result.displayPhone) {
+                        document.getElementById('displayPhoneText').textContent = result.displayPhone;
+                        var cleanNum = result.displayPhone.replace(/[^0-9+]/g, '');
+                        var telUri = cleanNum.startsWith('+') || cleanNum.startsWith('8') ? 'tel:' + cleanNum : 'tel:+' + cleanNum;
+                        document.getElementById('displayPhoneLink').href = telUri;
+                    }
+                    showStep('stepCalling');
+                    startPolling();
+                } else {
+                    showError(result.error === 'INVALID_PHONE' ? 'Неверный формат номера' : (result.detail || result.error || 'Ошибка'));
+                }
+            } catch (e) {
+                showError('Ошибка сети: ' + (e.message || 'попробуйте позже'));
+            }
+
+            document.getElementById('btnRequestText').style.display = 'inline';
+            document.getElementById('btnRequestLoader').style.display = 'none';
+            btn.disabled = false;
+        }
+
+        function startPolling() {
+            stopPolling();
+            pollInterval = setInterval(async function() {
+                try {
+                    var result = await trpcQuery('phoneAuth.checkStatus', { phone: currentPhone });
+
+                    if (result.ok === true) {
+                        stopPolling();
+                        localStorage.setItem(STORAGE_TOKEN, result.token);
+                        localStorage.setItem(STORAGE_PHONE, result.phone);
+                        showDashboard();
+                    } else if (result.error === 'EXPIRED' || result.error === 'NOT_FOUND') {
+                        stopPolling();
+                        showError(result.error === 'EXPIRED' ? 'Время истекло. Попробуйте снова.' : 'Запрос не найден.');
+                    }
+                } catch (e) {
+                    // network error, keep polling
+                }
+            }, 2500);
+        }
+
+        function stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+
+        function showStep(stepId) {
+            document.querySelectorAll('.auth-step').forEach(function(el) { el.style.display = 'none'; });
+            document.getElementById(stepId).style.display = 'block';
+        }
+
+        function showError(msg) {
+            document.getElementById('errorMessage').textContent = msg;
+            showStep('stepError');
+        }
+
+        function resetAuth() {
+            stopPolling();
+            showStep('stepPhone');
+            phoneInput.value = '';
+            phoneInput.focus();
+        }
+
+        async function showDashboard() {
+            document.getElementById('authScreen').style.display = 'none';
+            document.getElementById('dashboardScreen').style.display = 'block';
+
+            var token = localStorage.getItem(STORAGE_TOKEN);
+            var phone = localStorage.getItem(STORAGE_PHONE);
+
+            var formatted = phone;
+            if (phone && phone.length === 11) {
+                formatted = '+7 ' + phone.slice(1, 4) + '-' + phone.slice(4, 7) + '-' + phone.slice(7, 9) + '-' + phone.slice(9);
+            }
+            document.getElementById('dashPhone').textContent = formatted;
+
+            try {
+                var level = await trpcQuery('appData.getMyLevel', null, token, phone);
+
+                if (level.ok) {
+                    var isP = level.level >= 2;
+                    document.getElementById('dashLevel').textContent = isP ? 'УРОВЕНЬ 2 (ПРЕМИУМ)' : 'УРОВЕНЬ 1 (СТАНДАРТ)';
+                    document.getElementById('dashLevel').style.color = isP ? 'var(--primary)' : 'var(--text-secondary)';
+
+                    var maxC = level.maxContacts !== null ? level.maxContacts : '∞';
+                    document.getElementById('dashContacts').textContent = level.currentContacts + ' / ' + maxC;
+
+                    document.getElementById('dashAds').textContent = level.showAds ? 'ВКЛЮЧЕНА' : 'ОТКЛЮЧЕНА';
+                    document.getElementById('dashAds').style.color = level.showAds ? 'var(--danger)' : 'var(--primary)';
+
+                    if (level.subscribedUntil) {
+                        var d = new Date(level.subscribedUntil);
+                        document.getElementById('dashSubscription').textContent = 'АКТИВНА до ' + d.toLocaleDateString('ru-RU');
+                    } else {
+                        document.getElementById('dashSubscription').textContent = 'НЕ ОФОРМЛЕНА';
+                        document.getElementById('dashSubscription').style.color = 'var(--text-secondary)';
+                    }
+
+                    if (isP && level.subscribedUntil) {
+                        document.getElementById('subscriptionCTA').style.display = 'none';
+                        document.getElementById('subscriptionActive').style.display = 'block';
+                        var untilD = new Date(level.subscribedUntil);
+                        document.getElementById('subscriptionUntil').textContent = 'Допуск уровня 2 активен до ' + untilD.toLocaleDateString('ru-RU');
+                    } else {
+                        document.getElementById('subscriptionCTA').style.display = 'block';
+                        document.getElementById('subscriptionActive').style.display = 'none';
+                    }
+                } else {
+                    setDashDefaults();
+                }
+            } catch (e) {
+                setDashDefaults();
+            }
+        }
+
+        function setDashDefaults() {
+            document.getElementById('dashLevel').textContent = 'УРОВЕНЬ 1 (СТАНДАРТ)';
+            document.getElementById('dashContacts').textContent = '— / 20';
+            document.getElementById('dashAds').textContent = 'ВКЛЮЧЕНА';
+            document.getElementById('dashAds').style.color = 'var(--danger)';
+            document.getElementById('dashSubscription').textContent = 'НЕ ОФОРМЛЕНА';
+            document.getElementById('dashSubscription').style.color = 'var(--text-secondary)';
+            document.getElementById('subscriptionCTA').style.display = 'block';
+        }
+
+        function handleLogout() {
+            var token = localStorage.getItem(STORAGE_TOKEN);
+            if (token) {
+                fetch(API_BASE + '/phoneAuth.logout?batch=1', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-user-auth': 'Bearer ' + token },
+                    body: JSON.stringify({ '0': { json: null } })
+                }).catch(function() {});
+            }
+            localStorage.removeItem(STORAGE_TOKEN);
+            localStorage.removeItem(STORAGE_PHONE);
+            document.getElementById('dashboardScreen').style.display = 'none';
+            document.getElementById('authScreen').style.display = 'block';
+            resetAuth();
+        }
+
+        function handleSubscribe() {
+            alert('Платёжная система ЮKassa подключается. Скоро здесь будет оплата.');
+        }
+
+        function handleCancelSubscription() {
+            if (confirm('Вы уверены? Доступ к уровню 2 сохранится до конца оплаченного периода.')) {
+                alert('Функция отмены будет доступна после подключения ЮKassa.');
+            }
+        }
+
+        (function init() {
+            var token = localStorage.getItem(STORAGE_TOKEN);
+            var phone = localStorage.getItem(STORAGE_PHONE);
+            if (token && phone) {
+                showDashboard();
+            }
+        })();
+    </script>
+</body>
+</html>

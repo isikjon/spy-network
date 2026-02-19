@@ -656,10 +656,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
     }
   }, [saveAppDataToServer, saveTheme, saveLanguage, saveTutorialCompleted]);
 
+  // Не ждём ответа сервера — показываем приложение по кэшу сразу; данные с сервера подтянутся в фоне
   const isLoading =
-    phoneQuery.isLoading ||
-    cacheQuery.isLoading ||
-    (phoneNumber ? appDataQuery.isLoading : false);
+    phoneQuery.isLoading || cacheQuery.isLoading;
 
   const serverError = useMemo(() => {
     if (!appDataQuery.error) return null;

@@ -1,7 +1,7 @@
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle, ExternalLink } from 'lucide-react-native';
 import Tutorial from '@/components/Tutorial';
 import {
   StyleSheet,
@@ -13,9 +13,14 @@ import {
   ScrollView,
   TextInput,
   Modal,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
+import Constants from 'expo-constants';
+
+const WEB_VERSION_URL = 'https://spynetwork.ru';
+const APP_VERSION = Constants.expoConfig?.expo?.version ?? '1.0.2';
 
 export default function ProfileScreen() {
   const { phoneNumber, logout, dossiers, sectors, addSector, removeSector, updateSector, theme, currentTheme, switchTheme, t, currentLanguage, switchLanguage, resetTutorial, createBackup, restoreBackup } = useApp();
@@ -43,6 +48,8 @@ export default function ProfileScreen() {
 
   const styles = createStyles(theme);
 
+  const openWebVersion = () => Linking.openURL(WEB_VERSION_URL);
+
   const handleGetAccess = () => {
     Alert.alert(
       currentLanguage === 'ru' ? 'ПОЛУЧИТЬ ДОПУСК' : 'GET ACCESS',
@@ -50,7 +57,8 @@ export default function ProfileScreen() {
         ? 'Уровень 2 снимает лимит контактов и убирает рекламу. Подписка 99 руб./неделя. Оформить можно в веб-версии.'
         : 'Level 2 removes the contact limit and ads. Subscription 99 RUB/week. Available in the web version.',
       [
-        { text: 'OK', style: 'default' },
+        { text: 'OK', style: 'cancel' },
+        { text: currentLanguage === 'ru' ? 'Перейти на веб-версию' : 'Go to web version', onPress: openWebVersion },
       ]
     );
   };
@@ -250,6 +258,10 @@ export default function ProfileScreen() {
               <Text style={styles.infoLabel}>{t.profile.encryption}</Text>
               <Text style={styles.infoValue}>{t.profile.encryptionValue}</Text>
             </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'ВЕРСИЯ' : 'VERSION'}</Text>
+              <Text style={styles.infoValue}>{APP_VERSION}</Text>
+            </View>
           </View>
 
           {userLevel < 2 && (
@@ -274,14 +286,28 @@ export default function ProfileScreen() {
 
           {isAtLimit && (
             <View style={styles.limitWarning}>
-              <AlertTriangle size={16} color={theme.danger} strokeWidth={1.5} />
-              <Text style={styles.limitWarningText}>
-                {currentLanguage === 'ru'
-                  ? `Лимит контактов достигнут (${maxContacts}). Получите ДОПУСК уровня 2 для снятия ограничения.`
-                  : `Contact limit reached (${maxContacts}). Get Level 2 ACCESS to remove the limit.`}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <AlertTriangle size={16} color={theme.danger} strokeWidth={1.5} />
+                <Text style={styles.limitWarningText}>
+                  {currentLanguage === 'ru'
+                    ? `Лимит контактов достигнут (${maxContacts}). Вам необходимо повысить допуск — перейдите на веб-версию.`
+                    : `Contact limit reached (${maxContacts}). You need to upgrade — go to the web version.`}
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.webVersionLinkButton} onPress={openWebVersion} activeOpacity={0.7}>
+                <Text style={styles.webVersionLinkText}>
+                  {currentLanguage === 'ru' ? 'Перейти на веб-версию' : 'Go to web version'}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
+
+          <TouchableOpacity style={styles.webVersionButton} onPress={openWebVersion} activeOpacity={0.7}>
+            <ExternalLink size={20} color={theme.primary} strokeWidth={1.5} />
+            <Text style={styles.webVersionButtonText}>
+              {currentLanguage === 'ru' ? 'Перейти на веб-версию' : 'Go to web version'}
+            </Text>
+          </TouchableOpacity>
 
           <View style={styles.themeContainer}>
             <View style={styles.themeHeader}>
@@ -801,8 +827,8 @@ const createStyles = (theme: any) => StyleSheet.create({
     letterSpacing: 0.5,
   },
   limitWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     borderWidth: 2,
     borderColor: theme.danger,
     backgroundColor: theme.overlay,
@@ -817,6 +843,38 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.danger,
     fontFamily: 'monospace' as const,
     letterSpacing: 0.5,
+  },
+  webVersionLinkButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: theme.primary,
+  },
+  webVersionLinkText: {
+    fontSize: 12,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  webVersionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 2,
+    borderColor: theme.primary,
+    backgroundColor: theme.overlay,
+    paddingVertical: 14,
+    marginBottom: 20,
+  },
+  webVersionButtonText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
   },
   tutorialButton: {
     flexDirection: 'row',

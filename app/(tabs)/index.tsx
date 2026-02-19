@@ -16,9 +16,12 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ContactDossier } from '@/types';
+
+const WEB_VERSION_URL = 'https://spynetwork.ru';
 
 export default function DossiersScreen() {
   const { dossiers, addDossier, theme, t, phoneNumber, currentLanguage } = useApp();
@@ -87,12 +90,20 @@ export default function DossiersScreen() {
 
   const checkLimitAndWarn = (): boolean => {
     if (isAtLimit) {
+      const title = currentLanguage === 'ru' ? 'ЛИМИТ КОНТАКТОВ' : 'CONTACT LIMIT';
+      const message = currentLanguage === 'ru'
+        ? `В этой версии только до ${maxContacts} контактов. Вам необходимо повысить допуск — перейдите на веб-версию.`
+        : `This version allows up to ${maxContacts} contacts. You need to upgrade — go to the web version.`;
       Alert.alert(
-        currentLanguage === 'ru' ? 'ЛИМИТ КОНТАКТОВ' : 'CONTACT LIMIT',
-        currentLanguage === 'ru'
-          ? `Достигнут лимит ${maxContacts} контактов. Получите ДОПУСК уровня 2 в профиле для снятия ограничения.`
-          : `Reached the limit of ${maxContacts} contacts. Get Level 2 ACCESS in profile to remove the limit.`,
-        [{ text: 'OK', style: 'default' }]
+        title,
+        message,
+        [
+          { text: currentLanguage === 'ru' ? 'Закрыть' : 'Close', style: 'cancel' },
+          {
+            text: currentLanguage === 'ru' ? 'Перейти на веб-версию' : 'Go to web version',
+            onPress: () => Linking.openURL(WEB_VERSION_URL),
+          },
+        ]
       );
       return false;
     }

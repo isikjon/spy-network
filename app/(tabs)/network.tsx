@@ -486,8 +486,8 @@ export default function NetworkScreen() {
                         r={outerRadius}
                         fill="none"
                         stroke={ringStrokeColor}
-                        strokeWidth={0.6 / scale}
-                        opacity={0.9}
+                        strokeWidth={0.25 / scale}
+                        opacity={0.85}
                       />
                       <SvgCircle
                         cx={centerX}
@@ -495,8 +495,8 @@ export default function NetworkScreen() {
                         r={innerRadius}
                         fill="none"
                         stroke={ringStrokeColor}
-                        strokeWidth={0.6 / scale}
-                        opacity={0.9}
+                        strokeWidth={0.25 / scale}
+                        opacity={0.85}
                       />
                       {angleSource.map(({ sector, startAngle, endAngle }) => {
                         const count = sectorCircleCounts.get(sector) || 0;
@@ -531,8 +531,8 @@ export default function NetworkScreen() {
                             d={pathData}
                             fill="none"
                             stroke={ringStrokeColor}
-                            strokeWidth={0.5 / scale}
-                            opacity={count === 0 ? 0.25 : 0.9}
+                            strokeWidth={0.2 / scale}
+                            opacity={count === 0 ? 0.2 : 0.75}
                           />
                         );
                       })}
@@ -573,8 +573,8 @@ export default function NetworkScreen() {
                               ? '#000000'
                               : theme.border
                         }
-                        strokeWidth={1 / scale}
-                        opacity="0.75"
+                        strokeWidth={0.4 / scale}
+                        opacity="0.6"
                       />
                       <SvgText
                         x={centerX + labelRadius * Math.cos(midAngle)}
@@ -603,8 +603,8 @@ export default function NetworkScreen() {
                   x2={conn.to.x}
                   y2={conn.to.y}
                   stroke={theme.primary}
-                  strokeWidth={Math.max(0.5, conn.strength / 2) / scale}
-                  opacity={Math.min(0.6, conn.strength / 10)}
+                  strokeWidth={Math.max(0.2, conn.strength / 5) / scale}
+                  opacity={Math.min(0.45, conn.strength / 15)}
                 />
               ))}
 
@@ -612,8 +612,8 @@ export default function NetworkScreen() {
                 const dx = conn.to.x - conn.from.x;
                 const dy = conn.to.y - conn.from.y;
                 const length = Math.sqrt(dx * dx + dy * dy);
-                const arrowSize = 6 / scale;
-                const arrowSpacing = 20 / scale;
+                const arrowSize = 4 / scale;
+                const arrowSpacing = 24 / scale;
                 const numArrows = Math.floor(length / arrowSpacing);
 
                 return (
@@ -624,8 +624,8 @@ export default function NetworkScreen() {
                       x2={conn.to.x}
                       y2={conn.to.y}
                       stroke="#8B0000"
-                      strokeWidth={2 / scale}
-                      opacity={0.8}
+                      strokeWidth={0.8 / scale}
+                      opacity={0.7}
                     />
                     {Array.from({ length: numArrows }).map((_, arrowIdx) => {
                       const tt = (arrowIdx + 1) / (numArrows + 1);
@@ -685,7 +685,7 @@ export default function NetworkScreen() {
                         points={`${pos.x},${pos.y - nodeSize} ${pos.x + nodeSize * 0.866},${pos.y + nodeSize * 0.5} ${pos.x - nodeSize * 0.866},${pos.y + nodeSize * 0.5}`}
                         fill={theme.background}
                         stroke={color}
-                        strokeWidth={2 / scale}
+                        strokeWidth={0.8 / scale}
                       />
                     ) : (
                       <SvgCircle
@@ -694,7 +694,7 @@ export default function NetworkScreen() {
                         r={nodeSize}
                         fill={theme.background}
                         stroke={color}
-                        strokeWidth={2 / scale}
+                        strokeWidth={0.8 / scale}
                       />
                     )}
                     <SvgText
@@ -1081,11 +1081,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   filterButton: {
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: theme.border,
     backgroundColor: theme.overlay,
   },
   filterButtonActive: {
+    borderWidth: 1,
     borderColor: theme.primary,
     backgroundColor: theme.overlay,
   },

@@ -1,62 +1,75 @@
-/**
- * Автоматические резервные копии базы данных (store.json).
- * - Запускается при старте сервера
- * - Делает бэкап каждые 24 часа
- * - Хранит последние 7 бэкапов
- */
-
+import { Database } from "bun:sqlite";
 import * as fs from "fs";
 import * as path from "path";
+import { getDatabase } from "./store";
+import { sendBackupToSubscribers, formatBackupName } from "./telegram-bot";
 
-const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа
-const MAX_BACKUPS = 7;
+const BACKUP_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const MAX_BACKUPS = 30;
+const FIRST_BACKUP_DELAY_MS = 2 * 60 * 1000;
 
-function getStorePath(): string {
+function getDbPath(): string {
   const env = process.env.STORE_PATH;
-  if (env && typeof env === "string" && env.trim()) return env.trim();
-  return path.join(process.cwd(), "data", "store.json");
+  if (env && typeof env === "string" && env.trim()) {
+    return env.trim().replace(/\.json$/, ".db");
+  }
+  return path.join(process.cwd(), "data", "store.db");
 }
 
 function getBackupDir(): string {
-  return path.join(path.dirname(getStorePath()), "backups");
+  return path.join(path.dirname(getDbPath()), "backups");
 }
 
-function formatDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const h = String(date.getHours()).padStart(2, "0");
-  const min = String(date.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${d}_${h}-${min}`;
-}
+export async function createBackup(): Promise<void> {
+  const db = getDatabase();
+  if (!db) {
+    console.log("[backup] database not initialized, skipping");
+    return;
+  }
 
-async function createBackup(): Promise<void> {
-  const storePath = getStorePath();
   const backupDir = getBackupDir();
 
   try {
-    if (!fs.existsSync(storePath)) {
-      console.log("[backup] store.json not found, skipping backup");
-      return;
-    }
-
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }
 
-    const backupName = `store-backup-${formatDate(new Date())}.json`;
-    const backupPath = path.join(backupDir, backupName);
+    const now = new Date();
+    const localName = formatBackupName(now);
+    const backupPath = path.join(backupDir, localName);
 
-    fs.copyFileSync(storePath, backupPath);
+    db.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`);
 
     const stats = fs.statSync(backupPath);
     const sizeKb = Math.round(stats.size / 1024);
-    console.log(`[backup] created ${backupName} (${sizeKb}KB)`);
+    console.log(`[backup] created ${localName} (${sizeKb}KB)`);
 
-    // Удаляем старые бэкапы (оставляем последние MAX_BACKUPS)
+    const integrityOk = verifyBackup(backupPath);
+    if (!integrityOk) {
+      console.error(`[backup] integrity check FAILED for ${localName}, removing`);
+      fs.unlinkSync(backupPath);
+      return;
+    }
+
+    console.log(`[backup] integrity OK, sending to Telegram...`);
+    await sendBackupToSubscribers(backupPath);
+
     await cleanupOldBackups();
   } catch (e) {
     console.error("[backup] failed to create backup", e);
+  }
+}
+
+function verifyBackup(backupPath: string): boolean {
+  try {
+    const testDb = new Database(backupPath, { readonly: true });
+    const row = testDb.prepare("PRAGMA integrity_check").get() as { integrity_check: string };
+    const ok = row?.integrity_check === "ok";
+    testDb.close();
+    return ok;
+  } catch (e) {
+    console.error("[backup] verify failed", e);
+    return false;
   }
 }
 
@@ -66,8 +79,9 @@ async function cleanupOldBackups(): Promise<void> {
   try {
     if (!fs.existsSync(backupDir)) return;
 
-    const files = fs.readdirSync(backupDir)
-      .filter((f) => f.startsWith("store-backup-") && f.endsWith(".json"))
+    const files = fs
+      .readdirSync(backupDir)
+      .filter((f) => f.endsWith(".sqlite"))
       .sort()
       .reverse();
 
@@ -86,31 +100,20 @@ async function cleanupOldBackups(): Promise<void> {
 
 let backupInterval: ReturnType<typeof setInterval> | null = null;
 
-/**
- * Запуск автоматических бэкапов.
- * Делает первый бэкап через 5 минут после запуска, потом каждые 24 часа.
- */
 export function startBackupScheduler(): void {
-  console.log("[backup] scheduler started, interval: 24h, max backups:", MAX_BACKUPS);
+  console.log(
+    `[backup] scheduler started, interval: ${BACKUP_INTERVAL_MS / 3600000}h, max backups: ${MAX_BACKUPS}`,
+  );
 
-  // Первый бэкап через 5 минут (чтоб сервер успел загрузить данные)
   setTimeout(() => {
     createBackup();
     backupInterval = setInterval(createBackup, BACKUP_INTERVAL_MS);
-  }, 5 * 60 * 1000);
+  }, FIRST_BACKUP_DELAY_MS);
 }
 
-/**
- * Остановить бэкапы (для тестов).
- */
 export function stopBackupScheduler(): void {
   if (backupInterval) {
     clearInterval(backupInterval);
     backupInterval = null;
   }
 }
-
-/**
- * Ручное создание бэкапа (для админ-API).
- */
-export { createBackup };

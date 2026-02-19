@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Spy Network - Подписка и уровни допуска. Получите безлимитный доступ к системе управления контактами.">
+    <title>Spy Network - Подписка</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="pages.css">
+    <link rel="icon" type="image/png" href="favicon.png">
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div class="grid-overlay"></div>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">
+                <span class="logo-icon">◆</span>
+                <a href="index.html" class="logo-text" style="text-decoration:none;color:var(--text)">SPY NETWORK</a>
+            </div>
+            <div class="nav-links">
+                <a href="index.html#features">ФУНКЦИИ</a>
+                <a href="subscription.html" class="active">ПОДПИСКА</a>
+                <a href="account.html">КАБИНЕТ</a>
+                <a href="support.html">ПОДДЕРЖКА</a>
+                <a href="/admin" class="nav-admin">ADMIN</a>
+            </div>
+            <button class="mobile-menu-btn" onclick="toggleMenu()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html#features">ФУНКЦИИ</a>
+        <a href="subscription.html">ПОДПИСКА</a>
+        <a href="account.html">КАБИНЕТ</a>
+        <a href="support.html">ПОДДЕРЖКА</a>
+        <a href="/admin" class="nav-admin">ADMIN</a>
+    </div>
+
+    <div class="page-content">
+        <div class="page-header" style="text-align:center; border-bottom:none;">
+            <div class="status-line" style="justify-content:center;">
+                <span class="status-dot"></span>
+                <span>СИСТЕМА ДОПУСКА</span>
+            </div>
+            <h1>УРОВНИ ДОПУСКА</h1>
+            <p class="page-meta" style="max-width:600px; margin:16px auto 0;">
+                Выберите уровень допуска для работы с системой Spy Network.
+                Повышение уровня открывает полный доступ к возможностям платформы.
+            </p>
+        </div>
+
+        <section class="pricing-section">
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <div class="pricing-card-header">
+                        <div class="pricing-tier-icon">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                        </div>
+                        <div class="pricing-tier-badge">БАЗОВЫЙ</div>
+                        <h3>УРОВЕНЬ 1</h3>
+                        <p class="pricing-tier-subtitle">СТАНДАРТНЫЙ ДОПУСК</p>
+                    </div>
+                    <div class="pricing-card-price">
+                        <span class="pricing-amount">0</span>
+                        <span class="pricing-currency">₽</span>
+                        <span class="pricing-period">/ бесплатно</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            До 20 контактов в досье
+                        </li>
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            Визуализация сети связей
+                        </li>
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            Дневник взаимодействий
+                        </li>
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            Резервное копирование
+                        </li>
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            3 темы оформления
+                        </li>
+                        <li class="excluded">
+                            <span class="feature-cross">✕</span>
+                            Рекламные блоки
+                        </li>
+                        <li class="excluded">
+                            <span class="feature-cross">✕</span>
+                            Лимит 20 контактов
+                        </li>
+                    </ul>
+                    <div class="pricing-card-footer">
+                        <span class="pricing-current-label">ТЕКУЩИЙ УРОВЕНЬ</span>
+                    </div>
+                </div>
+
+                <div class="pricing-card premium">
+                    <div class="pricing-card-glow"></div>
+                    <div class="pricing-card-header">
+                        <div class="pricing-tier-icon premium-icon">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M2 4l3 12h14l3-12-5.5 7L12 2l-4.5 9L2 4z"/>
+                                <path d="M3 20h18"/>
+                            </svg>
+                        </div>
+                        <div class="pricing-tier-badge premium-badge">ПРЕМИУМ</div>
+                        <h3>УРОВЕНЬ 2</h3>
+                        <p class="pricing-tier-subtitle">ПОЛНЫЙ ДОПУСК</p>
+                    </div>
+                    <div class="pricing-card-price">
+                        <span class="pricing-amount">99</span>
+                        <span class="pricing-currency">₽</span>
+                        <span class="pricing-period">/ неделя</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            Неограниченное количество контактов
+                        </li>
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            Визуализация сети связей
+                        </li>
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            Дневник взаимодействий
+                        </li>
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            Резервное копирование
+                        </li>
+                        <li class="included">
+                            <span class="feature-check">✓</span>
+                            3 темы оформления
+                        </li>
+                        <li class="included highlight">
+                            <span class="feature-check">✓</span>
+                            Без рекламы
+                        </li>
+                        <li class="included highlight">
+                            <span class="feature-check">✓</span>
+                            Безлимит контактов
+                        </li>
+                    </ul>
+                    <div class="pricing-card-footer">
+                        <button class="btn btn-subscribe" onclick="handleSubscribe()">
+                            ОФОРМИТЬ ПОДПИСКУ
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="subscription-details">
+            <div class="section-header">
+                <div class="section-line"></div>
+                <h2>УСЛОВИЯ ПОДПИСКИ</h2>
+                <div class="section-line"></div>
+            </div>
+
+            <div class="details-grid">
+                <div class="detail-card">
+                    <div class="detail-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <h4>ПЕРИОД ПОДПИСКИ</h4>
+                    <p>Подписка оформляется на 1 неделю (7 дней). По истечении срока подписка автоматически продлевается.</p>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                            <line x1="1" y1="10" x2="23" y2="10"/>
+                        </svg>
+                    </div>
+                    <h4>СПОСОБЫ ОПЛАТЫ</h4>
+                    <p>Банковские карты Visa, MasterCard, МИР. Оплата производится через защищённый платёжный шлюз ЮKassa.</p>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
+                    <h4>БЕЗОПАСНОСТЬ</h4>
+                    <p>Все платежи защищены протоколом 3D-Secure. Данные карт не хранятся на наших серверах.</p>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <polyline points="1 4 1 10 7 10"/>
+                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                        </svg>
+                    </div>
+                    <h4>ОТМЕНА ПОДПИСКИ</h4>
+                    <p>Подписку можно отменить в любой момент в личном кабинете. Доступ сохраняется до конца оплаченного периода.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="subscription-comparison">
+            <div class="section-header">
+                <div class="section-line"></div>
+                <h2>СРАВНЕНИЕ УРОВНЕЙ</h2>
+                <div class="section-line"></div>
+            </div>
+
+            <div class="comparison-table-wrap">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>ФУНКЦИЯ</th>
+                            <th>УРОВЕНЬ 1</th>
+                            <th class="premium-col">УРОВЕНЬ 2</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Количество контактов</td>
+                            <td>до 20</td>
+                            <td class="premium-col">∞ безлимит</td>
+                        </tr>
+                        <tr>
+                            <td>Визуализация сети</td>
+                            <td class="check-cell">✓</td>
+                            <td class="premium-col check-cell">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Досье контактов</td>
+                            <td class="check-cell">✓</td>
+                            <td class="premium-col check-cell">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Дневник взаимодействий</td>
+                            <td class="check-cell">✓</td>
+                            <td class="premium-col check-cell">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Властные группировки</td>
+                            <td class="check-cell">✓</td>
+                            <td class="premium-col check-cell">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Резервное копирование</td>
+                            <td class="check-cell">✓</td>
+                            <td class="premium-col check-cell">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Темы оформления</td>
+                            <td class="check-cell">✓</td>
+                            <td class="premium-col check-cell">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Реклама</td>
+                            <td class="cross-cell">Есть</td>
+                            <td class="premium-col check-cell">Нет</td>
+                        </tr>
+                        <tr>
+                            <td>Стоимость</td>
+                            <td>Бесплатно</td>
+                            <td class="premium-col">99 ₽ / неделя</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="subscription-faq">
+            <div class="section-header">
+                <div class="section-line"></div>
+                <h2>ЧАСТЫЕ ВОПРОСЫ</h2>
+                <div class="section-line"></div>
+            </div>
+
+            <div class="faq-section">
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Как оформить подписку?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Нажмите кнопку «Оформить подписку» на этой странице. Вы будете перенаправлены на защищённую страницу оплаты ЮKassa, где сможете ввести данные банковской карты и подтвердить платёж.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Когда подписка начнёт действовать?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Подписка активируется мгновенно после успешной оплаты. Уровень допуска повышается автоматически, лимит контактов снимается, реклама отключается.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Как отменить подписку?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Откройте свой профиль в веб-версии и нажмите «Отменить подписку». Доступ к уровню 2 сохраняется до конца оплаченного периода. Средства за неиспользованные дни не возвращаются.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Что произойдёт с контактами при отмене?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Все ваши контакты и данные сохраняются. После окончания подписки уровень допуска вернётся к первому уровню, но существующие контакты не удаляются. Вы сможете просматривать все контакты, но добавлять новые сверх лимита не получится.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Какие способы оплаты принимаются?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Мы принимаем банковские карты Visa, MasterCard и МИР через платёжный сервис ЮKassa. Все транзакции защищены технологией 3D-Secure.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Подписка продлевается автоматически?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Да, подписка продлевается автоматически каждую неделю. Сумма списывается с привязанной карты. Вы можете отменить автопродление в любой момент в настройках профиля.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="subscription-legal">
+            <div class="legal-container">
+                <div class="legal-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="16" x2="12" y2="12"/>
+                        <line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                </div>
+                <div class="legal-text">
+                    <p>Оформляя подписку, вы соглашаетесь с <a href="terms.html">Условиями использования</a> и <a href="privacy.html">Политикой конфиденциальности</a>.</p>
+                    <p>Стоимость подписки: 99 ₽ в неделю. Подписка продлевается автоматически. Отмена доступна в любой момент.</p>
+                    <p>Платёжный сервис: ЮKassa (ООО «ЮМани», лицензия ЦБ РФ).</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-brand">
+                <div class="logo">
+                    <span class="logo-icon">◆</span>
+                    <span class="logo-text">SPY NETWORK</span>
+                </div>
+                <p>Профессиональное управление сетью контактов</p>
+            </div>
+            <div class="footer-links">
+                <div class="footer-column">
+                    <h4>ПРИЛОЖЕНИЕ</h4>
+                    <a href="index.html#features">Функции</a>
+                    <a href="subscription.html">Подписка</a>
+                    <a href="https://apps.apple.com" target="_blank">App Store</a>
+                    <a href="https://play.google.com" target="_blank">Google Play</a>
+                </div>
+                <div class="footer-column">
+                    <h4>ПРАВОВАЯ ИНФОРМАЦИЯ</h4>
+                    <a href="privacy.html">Политика конфиденциальности</a>
+                    <a href="terms.html">Условия использования</a>
+                </div>
+                <div class="footer-column">
+                    <h4>ПОДДЕРЖКА</h4>
+                    <a href="support.html">Центр поддержки</a>
+                    <a href="mailto:support@spynetwork.app">support@spynetwork.app</a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2024 Spy Network. Все права защищены.</p>
+            <p class="footer-version">v1.0.2 | СИСТЕМА АКТИВНА</p>
+        </div>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const menu = document.getElementById('mobileMenu');
+            menu.classList.toggle('active');
+        }
+
+        document.querySelectorAll('.mobile-menu a').forEach(link => {
+            link.addEventListener('click', () => {
+                document.getElementById('mobileMenu').classList.remove('active');
+            });
+        });
+
+        function toggleFaq(element) {
+            const item = element.parentElement;
+            item.classList.toggle('active');
+        }
+
+        function handleSubscribe() {
+            window.location.href = 'account.html';
+        }
+    </script>
+</body>
+</html>
