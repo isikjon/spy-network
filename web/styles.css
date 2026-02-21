@@ -179,6 +179,9 @@ body {
     padding: 120px 24px 60px;
     position: relative;
     z-index: 2;
+    max-width: 1200px;
+    margin: 0 auto;
+    gap: 60px;
 }
 
 .hero-content {

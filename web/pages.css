@@ -1138,6 +1138,7 @@
 .waiting-row {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 10px;
     font-size: 11px;
     color: var(--text-secondary);
