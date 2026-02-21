@@ -1,10 +1,24 @@
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
-import { Plus, Search, Shield, FileText, Users, X } from 'lucide-react-native';
-import { useState } from 'react';
+import {
+  BookOpen,
+  Network as NetworkIcon,
+  Palette,
+  Plus,
+  Search,
+  Shield,
+  FileText,
+  Users,
+  X,
+  User,
+  Globe,
+} from 'lucide-react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import * as Contacts from 'expo-contacts';
 import {
+  Animated,
+  Easing,
   StyleSheet,
   Text,
   TextInput,
@@ -16,14 +30,21 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  useWindowDimensions,
+  Pressable,
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DossierPane } from '@/components/DossierPane';
 import { ContactDossier } from '@/types';
+import NetworkScreen from './network';
+import ProfileScreen from './profile';
 
 const WEB_VERSION_URL = 'https://spynetwork.ru';
 
-export default function DossiersScreen() {
+type OpenDossierHandler = (payload: { id: string; edit?: boolean }) => void;
+
+function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) {
   const { dossiers, addDossier, theme, t, phoneNumber, currentLanguage } = useApp();
 
   const levelQuery = trpc.appData.getMyLevel.useQuery(undefined, {
@@ -33,6 +54,7 @@ export default function DossiersScreen() {
   const userLevel = levelQuery.data?.ok ? levelQuery.data.level : 1;
   const maxContacts = levelQuery.data?.ok ? levelQuery.data.maxContacts : 20;
   const isAtLimit = maxContacts !== null && dossiers.length >= maxContacts;
+
   const [search, setSearch] = useState('');
   const [showContactsModal, setShowContactsModal] = useState(false);
   const [phoneContacts, setPhoneContacts] = useState<Contacts.Contact[]>([]);
@@ -43,9 +65,9 @@ export default function DossiersScreen() {
 
   const filteredDossiers = dossiers.filter((d) => {
     if (!search) return true;
-    
+
     const searchLower = search.toLowerCase();
-    
+
     return (
       d.contact.name.toLowerCase().includes(searchLower) ||
       d.contact.phoneNumbers.some(p => p.toLowerCase().includes(searchLower)) ||
@@ -59,6 +81,28 @@ export default function DossiersScreen() {
       d.diary.some(entry => entry.content.toLowerCase().includes(searchLower))
     );
   });
+
+  const checkLimitAndWarn = (): boolean => {
+    if (isAtLimit) {
+      const title = currentLanguage === 'ru' ? 'ЛИМИТ КОНТАКТОВ' : 'CONTACT LIMIT';
+      const message = currentLanguage === 'ru'
+        ? `Ваш уровень допуска 1. Лимит контактов ${maxContacts}. Войдите в Ваш профиль на веб странице системы для повышения уровня допуска.`
+        : `Your clearance level is 1. Contact limit: ${maxContacts}. Log into your profile on the system web page to upgrade your clearance level.`;
+      Alert.alert(
+        title,
+        message,
+        [
+          { text: currentLanguage === 'ru' ? 'Закрыть' : 'Close', style: 'cancel' },
+          {
+            text: currentLanguage === 'ru' ? 'Открыть веб-версию' : 'Open web version',
+            onPress: () => Linking.openURL(WEB_VERSION_URL),
+          },
+        ]
+      );
+      return false;
+    }
+    return true;
+  };
 
   const loadContacts = async () => {
     if (!checkLimitAndWarn()) return;
@@ -86,28 +130,6 @@ export default function DossiersScreen() {
     } finally {
       setIsLoadingContacts(false);
     }
-  };
-
-  const checkLimitAndWarn = (): boolean => {
-    if (isAtLimit) {
-      const title = currentLanguage === 'ru' ? 'ЛИМИТ КОНТАКТОВ' : 'CONTACT LIMIT';
-      const message = currentLanguage === 'ru'
-        ? `В этой версии только до ${maxContacts} контактов. Вам необходимо повысить допуск — перейдите на веб-версию.`
-        : `This version allows up to ${maxContacts} contacts. You need to upgrade — go to the web version.`;
-      Alert.alert(
-        title,
-        message,
-        [
-          { text: currentLanguage === 'ru' ? 'Закрыть' : 'Close', style: 'cancel' },
-          {
-            text: currentLanguage === 'ru' ? 'Перейти на веб-версию' : 'Go to web version',
-            onPress: () => Linking.openURL(WEB_VERSION_URL),
-          },
-        ]
-      );
-      return false;
-    }
-    return true;
   };
 
   const handleSelectPhoneContact = (contact: Contacts.Contact) => {
@@ -140,7 +162,11 @@ export default function DossiersScreen() {
     addDossier(newDossier);
     setShowContactsModal(false);
     setContactSearch('');
-    router.push({ pathname: '/dossier/[id]', params: { id: newDossier.contact.id, edit: 'true' } });
+    if (onOpenDossier) {
+      onOpenDossier({ id: newDossier.contact.id, edit: true });
+    } else {
+      router.push({ pathname: '/dossier/[id]', params: { id: newDossier.contact.id, edit: 'true' } });
+    }
   };
 
   const handleAddMockContact = () => {
@@ -171,7 +197,11 @@ export default function DossiersScreen() {
       lastInteraction: new Date(),
     };
     addDossier(mockContact);
-    router.push({ pathname: '/dossier/[id]', params: { id: mockContact.contact.id, edit: 'true' } });
+    if (onOpenDossier) {
+      onOpenDossier({ id: mockContact.contact.id, edit: true });
+    } else {
+      router.push({ pathname: '/dossier/[id]', params: { id: mockContact.contact.id, edit: 'true' } });
+    }
   };
 
   const getImportanceColor = (importance: string) => {
@@ -190,7 +220,13 @@ export default function DossiersScreen() {
   const renderDossier = ({ item }: { item: ContactDossier }) => (
     <TouchableOpacity
       style={styles.dossierCard}
-      onPress={() => router.push({ pathname: '/dossier/[id]', params: { id: item.contact.id } })}
+      onPress={() => {
+        if (onOpenDossier) {
+          onOpenDossier({ id: item.contact.id });
+        } else {
+          router.push({ pathname: '/dossier/[id]', params: { id: item.contact.id } });
+        }
+      }}
       activeOpacity={0.7}
     >
       <View style={styles.dossierHeader}>
@@ -231,7 +267,7 @@ export default function DossiersScreen() {
   );
 
   return (
-    <View style={styles.background}>
+    <View style={styles.background} testID="dossiersTabRoot">
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
@@ -351,8 +387,8 @@ export default function DossiersScreen() {
               </View>
 
               <FlatList
-                data={phoneContacts.filter(c => 
-                  !contactSearch || 
+                data={phoneContacts.filter(c =>
+                  !contactSearch ||
                   (c.name && c.name.toLowerCase().includes(contactSearch.toLowerCase())) ||
                   (c.phoneNumbers && c.phoneNumbers.some(p => p.number?.includes(contactSearch))) ||
                   (c.emails && c.emails.some(e => e.email?.toLowerCase().includes(contactSearch.toLowerCase())))
@@ -387,6 +423,162 @@ export default function DossiersScreen() {
       </SafeAreaView>
     </View>
   );
+}
+
+type WebDossierPaneMode = 'list' | 'dossier';
+
+function WebSplitView() {
+  const { theme } = useApp();
+  const { width } = useWindowDimensions();
+  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
+  const [paneMode, setPaneMode] = useState<WebDossierPaneMode>('list');
+  const [selectedDossierId, setSelectedDossierId] = useState<string | null>(null);
+  const [selectedDossierEditing, setSelectedDossierEditing] = useState<boolean>(false);
+
+  const overlayWidth = Math.min(520, Math.max(360, Math.floor(width * 0.42)));
+  const translateX = useRef<Animated.Value>(new Animated.Value(overlayWidth + 24)).current;
+  const overlayOpacity = useRef<Animated.Value>(new Animated.Value(0)).current;
+
+  const openProfile = useCallback(() => {
+    setIsProfileOpen(true);
+    translateX.setValue(overlayWidth + 24);
+    overlayOpacity.setValue(0);
+    Animated.parallel([
+      Animated.timing(translateX, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayOpacity, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [overlayOpacity, overlayWidth, translateX]);
+
+  const closeProfile = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateX, {
+        toValue: overlayWidth + 24,
+        duration: 200,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 140,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) setIsProfileOpen(false);
+    });
+  }, [overlayOpacity, overlayWidth, translateX]);
+
+  const railItems = useMemo(
+    () => [
+      { key: 'profile', icon: User },
+      { key: 'theme', icon: Palette },
+      { key: 'language', icon: Globe },
+      { key: 'tutorial', icon: BookOpen },
+    ],
+    []
+  );
+
+  const styles = createWebSplitStyles(theme);
+
+  return (
+    <View style={styles.root} testID="webSplitRoot">
+      <View style={styles.leftPane} testID="webSplitLeftPane">
+        {paneMode === 'list' || !selectedDossierId ? (
+          <DossiersTab
+            onOpenDossier={({ id, edit }) => {
+              setSelectedDossierId(id);
+              setSelectedDossierEditing(!!edit);
+              setPaneMode('dossier');
+            }}
+          />
+        ) : (
+          <DossierPane
+            dossierId={selectedDossierId}
+            initialEdit={selectedDossierEditing}
+            onBack={() => {
+              setPaneMode('list');
+              setSelectedDossierEditing(false);
+            }}
+            onOpenNetwork={() => {}}
+          />
+        )}
+      </View>
+
+      <View style={styles.rightPane} testID="webSplitRightPane">
+        <View style={styles.mapPane} testID="webSplitMapPane">
+          <NetworkScreen
+            onOpenDossier={({ id, edit }) => {
+              setSelectedDossierId(id);
+              setSelectedDossierEditing(!!edit);
+              setPaneMode('dossier');
+            }}
+          />
+        </View>
+
+        <View style={styles.rail} testID="webSplitProfileRail">
+          <View style={styles.railTop}>
+            <NetworkIcon size={18} color={theme.primaryDim} />
+          </View>
+          <View style={styles.railDivider} />
+          {railItems.map((item, idx) => (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.railButton, idx === 0 && styles.railButtonFirst]}
+              onPress={openProfile}
+              activeOpacity={0.7}
+              testID={`profileRailBtn_${item.key}`}
+            >
+              <item.icon size={20} color={theme.primary} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {isProfileOpen && (
+          <View style={styles.overlayHost} testID="profileOverlayHost">
+            <Pressable style={styles.backdrop} onPress={closeProfile} testID="profileOverlayBackdrop" />
+            <Animated.View
+              style={[
+                styles.profileOverlay,
+                {
+                  width: overlayWidth,
+                  transform: [{ translateX }],
+                  opacity: overlayOpacity,
+                },
+              ]}
+              testID="profileOverlay"
+            >
+              <View style={styles.profileOverlayHeader}>
+                <Text style={styles.profileOverlayTitle}>PROFILE</Text>
+                <TouchableOpacity onPress={closeProfile} activeOpacity={0.7} testID="profileOverlayClose">
+                  <X size={20} color={theme.primary} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.profileOverlayBody}>
+                <ProfileScreen embedded />
+              </View>
+            </Animated.View>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+export default function DossiersScreen() {
+  if (Platform.OS === 'web') {
+    return <WebSplitView />;
+  }
+  return <DossiersTab />;
 }
 
 const createStyles = (theme: any) => StyleSheet.create({
@@ -625,3 +817,117 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontFamily: 'monospace' as const,
   },
 });
+
+const createWebSplitStyles = (theme: any) => {
+  const railWidth = 54;
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      flexDirection: 'row',
+      backgroundColor: theme.background,
+    },
+    leftPane: {
+      flex: 1,
+      minWidth: 380,
+      borderRightWidth: 2,
+      borderRightColor: theme.border,
+      backgroundColor: theme.background,
+    },
+    rightPane: {
+      flex: 1,
+      flexDirection: 'row',
+      backgroundColor: theme.background,
+    },
+    mapPane: {
+      flex: 1,
+      borderRightWidth: 2,
+      borderRightColor: theme.border,
+      backgroundColor: theme.background,
+    },
+    rail: {
+      width: railWidth,
+      backgroundColor: theme.background,
+      borderLeftWidth: 2,
+      borderLeftColor: theme.border,
+      alignItems: 'center',
+      paddingTop: 10,
+    },
+    railTop: {
+      width: railWidth - 16,
+      height: 32,
+      borderWidth: 2,
+      borderColor: theme.border,
+      backgroundColor: theme.overlay,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    railDivider: {
+      width: railWidth - 18,
+      height: 2,
+      backgroundColor: theme.border,
+      marginVertical: 10,
+    },
+    railButton: {
+      width: railWidth - 16,
+      height: 42,
+      borderWidth: 2,
+      borderColor: theme.border,
+      backgroundColor: theme.overlay,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 10,
+    },
+    railButtonFirst: {
+      shadowColor: theme.primary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    overlayHost: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.35)',
+    },
+    profileOverlay: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: theme.background,
+      borderLeftWidth: 2,
+      borderLeftColor: theme.border,
+      shadowColor: '#000',
+      shadowOffset: { width: -8, height: 0 },
+      shadowOpacity: 0.22,
+      shadowRadius: 18,
+      elevation: 8,
+    },
+    profileOverlayHeader: {
+      height: 56,
+      borderBottomWidth: 2,
+      borderBottomColor: theme.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 14,
+      backgroundColor: theme.overlay,
+    },
+    profileOverlayTitle: {
+      fontSize: 12,
+      fontWeight: '800' as const,
+      letterSpacing: 3,
+      color: theme.primary,
+      fontFamily: 'monospace' as const,
+    },
+    profileOverlayBody: {
+      flex: 1,
+    },
+  });
+};

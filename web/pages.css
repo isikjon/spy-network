@@ -1396,6 +1396,85 @@
     color: var(--danger);
 }
 
+/* QR Auth styles */
+.auth-methods {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 0;
+}
+
+.btn-method {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px 24px;
+    font-size: 14px;
+}
+
+.btn-method svg {
+    flex-shrink: 0;
+}
+
+.btn-method-secondary {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+.btn-method-secondary:hover {
+    border-color: var(--primary);
+    color: var(--text);
+}
+
+.qr-container {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.qr-container h2 {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    letter-spacing: 3px;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
+.qr-code-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 24px auto;
+    width: 240px;
+    height: 240px;
+    border: 2px solid var(--primary);
+    background: #0a0a0a;
+    position: relative;
+}
+
+.qr-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qr-code-wrap canvas {
+    max-width: 100%;
+    max-height: 100%;
+    image-rendering: pixelated;
+}
+
+#qrTimer {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    margin-top: 12px;
+}
+
 @media (max-width: 700px) {
     .dashboard-grid {
         grid-template-columns: 1fr;
@@ -1417,5 +1496,10 @@
 
     .auth-step {
         padding: 24px;
+    }
+
+    .qr-code-wrap {
+        width: 200px;
+        height: 200px;
     }
 }

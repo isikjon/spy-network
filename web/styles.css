@@ -490,6 +490,33 @@ body {
     background: linear-gradient(90deg, transparent, var(--primary), transparent);
 }
 
+.web-login-guide {
+    padding: 60px 24px 40px;
+    position: relative;
+    z-index: 2;
+}
+
+.web-login-guide .section-header { margin-bottom: 24px; }
+
+.login-steps {
+    max-width: 560px;
+    margin: 0 auto;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+}
+
+.login-steps p { margin-bottom: 12px; }
+
+.login-steps a {
+    color: var(--primary);
+    text-decoration: none;
+    letter-spacing: 1px;
+}
+
+.login-steps a:hover { text-decoration: underline; }
+
 .features {
     padding: 100px 24px;
     position: relative;

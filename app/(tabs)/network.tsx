@@ -1,6 +1,6 @@
 import { useApp } from '@/contexts/AppContext';
 import { Network as NetworkIcon, Circle } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -13,27 +13,94 @@ import {
   Dimensions,
   PanResponder,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle as SvgCircle, Line, Text as SvgText, G, Path, Polygon } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { Sector, ContactDossier, FunctionalCircle } from '@/types';
 
 const { width, height } = Dimensions.get('window');
 const MAP_SIZE = Math.min(width, height * 0.67);
 
-export default function NetworkScreen() {
+type OpenDossierHandler = (payload: { id: string; edit?: boolean }) => void;
+
+type NetworkScreenProps = {
+  onOpenDossier?: OpenDossierHandler;
+};
+
+type WebWheelBlockerProps = {
+  children: React.ReactNode;
+  style: any;
+  testID: string;
+  isActiveRef: React.MutableRefObject<boolean>;
+  onWheelZoom: (evt: any) => void;
+};
+
+function WebWheelBlocker({ children, style, testID, isActiveRef, onWheelZoom }: WebWheelBlockerProps) {
+  const hostRef = useRef<any>(null);
+  const onWheelZoomRef = useRef(onWheelZoom);
+
+  useEffect(() => {
+    onWheelZoomRef.current = onWheelZoom;
+  }, [onWheelZoom]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = hostRef.current;
+    if (!el || typeof el.addEventListener !== 'function') return;
+
+    const onWheelNative = (e: any) => {
+      if (!isActiveRef.current) return;
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+      onWheelZoomRef.current?.({
+        nativeEvent: e,
+        preventDefault: () => e.preventDefault(),
+        stopPropagation: () => e.stopPropagation(),
+      });
+    };
+
+    try {
+      el.addEventListener('wheel', onWheelNative, { passive: false });
+    } catch (err) {
+      console.warn('[NetworkMap] failed to attach native wheel listener', err);
+    }
+
+    return () => {
+      try {
+        el.removeEventListener('wheel', onWheelNative);
+      } catch (err) {
+        console.warn('[NetworkMap] failed to remove native wheel listener', err);
+      }
+    };
+  }, [isActiveRef]);
+
+  return (
+    <View
+      ref={(r: any) => {
+        hostRef.current = r;
+      }}
+      style={style}
+      testID={testID}
+    >
+      {children}
+    </View>
+  );
+}
+
+export default function NetworkScreen({ onOpenDossier }: NetworkScreenProps) {
   const { dossiers, sectors, theme, powerGroupings, t, currentTheme } = useApp();
   const router = useRouter();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
+
+  const shouldRedirectToSplitView = Platform.OS === 'web' && !onOpenDossier;
   const [filterSectors, setFilterSectors] = useState<Sector[]>([]);
   const [filterCircle, setFilterCircle] = useState<string | null>(null);
   const [filterPowerGroupings, setFilterPowerGroupings] = useState<string[]>([]);
 
   const [isFullscreenMap, setIsFullscreenMap] = useState<boolean>(false);
   const [scale, setScale] = useState<number>(1);
-  const [offsetX, setOffsetX] = useState<number>(0);
-  const [offsetY, setOffsetY] = useState<number>(0);
 
   const animatedScale = useRef<Animated.Value>(new Animated.Value(1)).current;
   const animatedOffsetX = useRef<Animated.Value>(new Animated.Value(0)).current;
@@ -223,18 +290,30 @@ export default function NetworkScreen() {
       to: { x: number; y: number };
       strength: number;
     }[] = [];
+    const seen = new Set<string>();
 
     filteredDossiers.forEach((dossier) => {
       const fromPos = positions.get(dossier.contact.id);
       if (!fromPos) return;
 
       dossier.relations.forEach((relation) => {
+        const pairKey = [dossier.contact.id, relation.contactId].sort().join('::');
+        if (seen.has(pairKey)) return;
+        seen.add(pairKey);
+
         const toPos = positions.get(relation.contactId);
         if (toPos) {
+          const reciprocal = filteredDossiers
+            .find(d => d.contact.id === relation.contactId)
+            ?.relations.find(r => r.contactId === dossier.contact.id);
+          const avgStrength = reciprocal
+            ? (relation.strength + reciprocal.strength) / 2
+            : relation.strength;
+
           conns.push({
             from: fromPos,
             to: toPos,
-            strength: relation.strength,
+            strength: avgStrength,
           });
         }
       });
@@ -248,9 +327,14 @@ export default function NetworkScreen() {
       from: { x: number; y: number };
       to: { x: number; y: number };
     }[] = [];
+    const seen = new Set<string>();
 
     filteredDossiers.forEach((dossier) => {
       if (dossier.powerGrouping?.suzerainId) {
+        const pairKey = [dossier.contact.id, dossier.powerGrouping.suzerainId].sort().join('::');
+        if (seen.has(pairKey)) return;
+        seen.add(pairKey);
+
         const fromPos = positions.get(dossier.contact.id);
         const toPos = positions.get(dossier.powerGrouping.suzerainId);
         if (fromPos && toPos) {
@@ -329,9 +413,9 @@ export default function NetworkScreen() {
     isPinching.current = false;
     isFullscreenRef.current = false;
     setScale(1);
-    setOffsetX(0);
-    setOffsetY(0);
-    setIsFullscreenMap(false);
+    if (Platform.OS !== 'web') {
+      setIsFullscreenMap(false);
+    }
     animateTransformTo({ scale: 1, x: 0, y: 0 });
   }, [animateTransformTo, panStartOffset]);
 
@@ -360,7 +444,7 @@ export default function NetworkScreen() {
             animateTransformTo({ scale: newScale });
 
             const shouldFullscreen = newScale > 1.2;
-            if (shouldFullscreen !== isFullscreenRef.current) {
+            if (Platform.OS !== 'web' && shouldFullscreen !== isFullscreenRef.current) {
               console.log('[NetworkMap] fullscreen toggle via scale', {
                 newScale,
                 shouldFullscreen,
@@ -379,8 +463,6 @@ export default function NetworkScreen() {
               offsetXRef.current = 0;
               offsetYRef.current = 0;
               panStartOffset.current = { x: 0, y: 0 };
-              setOffsetX(0);
-              setOffsetY(0);
               animateTransformTo({ x: 0, y: 0 });
             }
           }
@@ -396,8 +478,6 @@ export default function NetworkScreen() {
 
           offsetXRef.current = clampedX;
           offsetYRef.current = clampedY;
-          setOffsetX(clampedX);
-          setOffsetY(clampedY);
           animateTransformTo({ x: clampedX, y: clampedY }, { immediate: true });
         }
       },
@@ -419,8 +499,6 @@ export default function NetworkScreen() {
           offsetYRef.current = 0;
           panStartOffset.current = { x: 0, y: 0 };
           setScale(1);
-          setOffsetX(0);
-          setOffsetY(0);
           animateTransformTo({ scale: 1, x: 0, y: 0 });
           return;
         }
@@ -432,8 +510,6 @@ export default function NetworkScreen() {
         if (clampedX !== offsetXRef.current || clampedY !== offsetYRef.current) {
           offsetXRef.current = clampedX;
           offsetYRef.current = clampedY;
-          setOffsetX(clampedX);
-          setOffsetY(clampedY);
           animateTransformTo({ x: clampedX, y: clampedY });
         }
       },
@@ -442,19 +518,179 @@ export default function NetworkScreen() {
 
   const handleContactPress = useCallback(
     (contactId: string) => {
+      if (onOpenDossier) {
+        console.log('[NetworkMap] open dossier via callback', { contactId });
+        onOpenDossier({ id: contactId });
+        return;
+      }
       router.push(`/dossier/${contactId}`);
     },
-    [router],
+    [onOpenDossier, router],
   );
+
+  const isPointerOverMapRef = useRef<boolean>(false);
+
+  const handleWheel = useCallback(
+    (evt: any) => {
+      if (Platform.OS !== 'web') return;
+      if (!isPointerOverMapRef.current) return;
+
+      const deltaY: number =
+        typeof evt?.nativeEvent?.deltaY === 'number'
+          ? evt.nativeEvent.deltaY
+          : typeof evt?.deltaY === 'number'
+            ? evt.deltaY
+            : 0;
+
+      if (deltaY === 0) return;
+
+      if (typeof evt?.preventDefault === 'function') {
+        evt.preventDefault();
+      }
+      if (typeof evt?.stopPropagation === 'function') {
+        evt.stopPropagation();
+      }
+
+      const zoomFactor = Math.exp(-deltaY * 0.0012);
+      const nextScale = Math.min(Math.max(scaleRef.current * zoomFactor, 1), 3);
+
+      if (Math.abs(nextScale - scaleRef.current) < 0.001) return;
+
+      console.log('[NetworkMap] wheel zoom', { deltaY, from: scaleRef.current, to: nextScale });
+
+      scaleRef.current = nextScale;
+      setScale(nextScale);
+      animateTransformTo({ scale: nextScale }, { immediate: true });
+
+      const shouldFullscreen = nextScale > 1.2;
+      if (Platform.OS !== 'web' && shouldFullscreen !== isFullscreenRef.current) {
+        isFullscreenRef.current = shouldFullscreen;
+        setIsFullscreenMap(shouldFullscreen);
+      }
+
+      if (isFullscreenRef.current && nextScale <= 1.05) {
+        resetMapTransform();
+      }
+
+      if (!shouldFullscreen && nextScale <= 1.02) {
+        offsetXRef.current = 0;
+        offsetYRef.current = 0;
+        panStartOffset.current = { x: 0, y: 0 };
+        animateTransformTo({ x: 0, y: 0 }, { immediate: true });
+      }
+    },
+    [animateTransformTo, resetMapTransform],
+  );
+
+  const WheelView = View as unknown as React.ComponentType<any>;
+
+  const WheelScrollView = ScrollView as unknown as React.ComponentType<any>;
+
+  const WheelHorizontalScroll = (props: {
+    children: React.ReactNode;
+    contentContainerStyle: any;
+    testID: string;
+  }) => {
+    const { children, contentContainerStyle, testID } = props;
+    const scrollRef = useRef<ScrollView | null>(null);
+    const lastXRef = useRef<number>(0);
+    const isHoverRef = useRef<boolean>(false);
+
+    const handleWheelHorizontal = useCallback((evt: any) => {
+      if (Platform.OS !== 'web') return;
+      if (!isHoverRef.current) return;
+
+      const deltaY: number =
+        typeof evt?.nativeEvent?.deltaY === 'number'
+          ? evt.nativeEvent.deltaY
+          : typeof evt?.deltaY === 'number'
+            ? evt.deltaY
+            : 0;
+
+      if (deltaY === 0) return;
+
+      if (typeof evt?.preventDefault === 'function') {
+        evt.preventDefault();
+      }
+      if (typeof evt?.stopPropagation === 'function') {
+        evt.stopPropagation();
+      }
+
+      const nextX = Math.max(0, lastXRef.current + deltaY);
+      lastXRef.current = nextX;
+      scrollRef.current?.scrollTo({ x: nextX, y: 0, animated: false });
+    }, []);
+
+    return (
+      <WheelScrollView
+        ref={(r: ScrollView | null) => {
+          scrollRef.current = r;
+        }}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={contentContainerStyle}
+        onScroll={(e: any) => {
+          const x =
+            typeof e?.nativeEvent?.contentOffset?.x === 'number'
+              ? e.nativeEvent.contentOffset.x
+              : 0;
+          lastXRef.current = x;
+        }}
+        scrollEventThrottle={16}
+        onMouseEnter={
+          Platform.OS === 'web'
+            ? () => {
+                isHoverRef.current = true;
+              }
+            : undefined
+        }
+        onMouseLeave={
+          Platform.OS === 'web'
+            ? () => {
+                isHoverRef.current = false;
+              }
+            : undefined
+        }
+        onWheel={Platform.OS === 'web' ? handleWheelHorizontal : undefined}
+        onWheelCapture={Platform.OS === 'web' ? handleWheelHorizontal : undefined}
+        testID={testID}
+      >
+        {children}
+      </WheelScrollView>
+    );
+  };
 
   const renderMap = useCallback(
     (containerStyle: any, mapTestId: string) => {
       return (
-        <View
+        <WebWheelBlocker
           style={containerStyle}
-          {...panResponder.panHandlers}
           testID={mapTestId}
+          isActiveRef={isPointerOverMapRef}
+          onWheelZoom={handleWheel}
         >
+          <WheelView
+            style={StyleSheet.absoluteFill}
+            {...panResponder.panHandlers}
+            onMouseEnter={
+              Platform.OS === 'web'
+                ? () => {
+                    console.log('[NetworkMap] pointer enter');
+                    isPointerOverMapRef.current = true;
+                  }
+                : undefined
+            }
+            onMouseLeave={
+              Platform.OS === 'web'
+                ? () => {
+                    console.log('[NetworkMap] pointer leave');
+                    isPointerOverMapRef.current = false;
+                  }
+                : undefined
+            }
+            onWheel={Platform.OS === 'web' ? handleWheel : undefined}
+            onWheelCapture={Platform.OS === 'web' ? handleWheel : undefined}
+          >
           <Animated.View
             style={{
               transform: [
@@ -486,8 +722,8 @@ export default function NetworkScreen() {
                         r={outerRadius}
                         fill="none"
                         stroke={ringStrokeColor}
-                        strokeWidth={0.25 / scale}
-                        opacity={0.85}
+                        strokeWidth={0.6 / scale}
+                        opacity={0.9}
                       />
                       <SvgCircle
                         cx={centerX}
@@ -495,8 +731,8 @@ export default function NetworkScreen() {
                         r={innerRadius}
                         fill="none"
                         stroke={ringStrokeColor}
-                        strokeWidth={0.25 / scale}
-                        opacity={0.85}
+                        strokeWidth={0.6 / scale}
+                        opacity={0.9}
                       />
                       {angleSource.map(({ sector, startAngle, endAngle }) => {
                         const count = sectorCircleCounts.get(sector) || 0;
@@ -531,8 +767,8 @@ export default function NetworkScreen() {
                             d={pathData}
                             fill="none"
                             stroke={ringStrokeColor}
-                            strokeWidth={0.2 / scale}
-                            opacity={count === 0 ? 0.2 : 0.75}
+                            strokeWidth={0.5 / scale}
+                            opacity={count === 0 ? 0.25 : 0.9}
                           />
                         );
                       })}
@@ -547,17 +783,6 @@ export default function NetworkScreen() {
                   const midAngle = (startAngle + endAngle) / 2;
                   const labelRadius = maxRadius * 1.1;
 
-                  const sectorColors = [
-                    theme.primary,
-                    theme.warning,
-                    theme.danger,
-                    '#4A90E2',
-                    '#50C878',
-                    '#FF6B9D',
-                    '#FFD700',
-                    '#9370DB',
-                  ];
-                  const sectorColor = sectorColors[idx % sectorColors.length];
 
                   return (
                     <G key={`sector-${sector}`}>
@@ -573,8 +798,8 @@ export default function NetworkScreen() {
                               ? '#000000'
                               : theme.border
                         }
-                        strokeWidth={0.4 / scale}
-                        opacity="0.6"
+                        strokeWidth={1 / scale}
+                        opacity="0.75"
                       />
                       <SvgText
                         x={centerX + labelRadius * Math.cos(midAngle)}
@@ -603,8 +828,8 @@ export default function NetworkScreen() {
                   x2={conn.to.x}
                   y2={conn.to.y}
                   stroke={theme.primary}
-                  strokeWidth={Math.max(0.2, conn.strength / 5) / scale}
-                  opacity={Math.min(0.45, conn.strength / 15)}
+                  strokeWidth={Math.max(0.5, conn.strength / 2) / scale}
+                  opacity={Math.min(0.6, conn.strength / 10)}
                 />
               ))}
 
@@ -612,8 +837,8 @@ export default function NetworkScreen() {
                 const dx = conn.to.x - conn.from.x;
                 const dy = conn.to.y - conn.from.y;
                 const length = Math.sqrt(dx * dx + dy * dy);
-                const arrowSize = 4 / scale;
-                const arrowSpacing = 24 / scale;
+                const arrowSize = 6 / scale;
+                const arrowSpacing = 20 / scale;
                 const numArrows = Math.floor(length / arrowSpacing);
 
                 return (
@@ -624,8 +849,8 @@ export default function NetworkScreen() {
                       x2={conn.to.x}
                       y2={conn.to.y}
                       stroke="#8B0000"
-                      strokeWidth={0.8 / scale}
-                      opacity={0.7}
+                      strokeWidth={2 / scale}
+                      opacity={0.8}
                     />
                     {Array.from({ length: numArrows }).map((_, arrowIdx) => {
                       const tt = (arrowIdx + 1) / (numArrows + 1);
@@ -685,7 +910,7 @@ export default function NetworkScreen() {
                         points={`${pos.x},${pos.y - nodeSize} ${pos.x + nodeSize * 0.866},${pos.y + nodeSize * 0.5} ${pos.x - nodeSize * 0.866},${pos.y + nodeSize * 0.5}`}
                         fill={theme.background}
                         stroke={color}
-                        strokeWidth={0.8 / scale}
+                        strokeWidth={2 / scale}
                       />
                     ) : (
                       <SvgCircle
@@ -694,7 +919,7 @@ export default function NetworkScreen() {
                         r={nodeSize}
                         fill={theme.background}
                         stroke={color}
-                        strokeWidth={0.8 / scale}
+                        strokeWidth={2 / scale}
                       />
                     )}
                     <SvgText
@@ -736,10 +961,17 @@ export default function NetworkScreen() {
               );
             })}
           </Animated.View>
-        </View>
+          </WheelView>
+        </WebWheelBlocker>
       );
     },
     [
+      WheelView,
+      animatedOffsetX,
+      animatedOffsetY,
+      animatedScale,
+      canvasHeight,
+      canvasWidth,
       centerX,
       centerY,
       connections,
@@ -747,11 +979,8 @@ export default function NetworkScreen() {
       filterCircle,
       filteredDossiers,
       handleContactPress,
+      handleWheel,
       mapBaseSize,
-      canvasHeight,
-      canvasWidth,
-      offsetX,
-      offsetY,
       panResponder.panHandlers,
       positions,
       powerConnections,
@@ -764,6 +993,11 @@ export default function NetworkScreen() {
     ],
   );
 
+  if (shouldRedirectToSplitView) {
+    console.log('[NetworkScreen] web standalone route opened; redirecting to split view');
+    return <Redirect href="/" />;
+  }
+
   return (
     <View style={styles.background}>
       <StatusBar barStyle="light-content" />
@@ -775,11 +1009,7 @@ export default function NetworkScreen() {
 
         <View>
           <Text style={styles.filterLabel}>{t.network.sector}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
-          >
+          <WheelHorizontalScroll contentContainerStyle={styles.filters} testID="network-filter-sectors-scroll">
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -827,14 +1057,10 @@ export default function NetworkScreen() {
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </WheelHorizontalScroll>
 
           <Text style={styles.filterLabel}>{t.network.functionalCircle}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
-          >
+          <WheelHorizontalScroll contentContainerStyle={styles.filters} testID="network-filter-circles-scroll">
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -875,14 +1101,10 @@ export default function NetworkScreen() {
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </WheelHorizontalScroll>
 
           <Text style={styles.filterLabel}>{t.network.powerGrouping}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
-          >
+          <WheelHorizontalScroll contentContainerStyle={styles.filters} testID="network-filter-powergroups-scroll">
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -929,7 +1151,7 @@ export default function NetworkScreen() {
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </WheelHorizontalScroll>
         </View>
 
         {dossiers.length === 0 ? (
@@ -1081,12 +1303,11 @@ const createStyles = (theme: any) => StyleSheet.create({
   filterButton: {
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: theme.border,
     backgroundColor: theme.overlay,
   },
   filterButtonActive: {
-    borderWidth: 1,
     borderColor: theme.primary,
     backgroundColor: theme.overlay,
   },

@@ -1,8 +1,9 @@
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle, ExternalLink } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle, ExternalLink, QrCode } from 'lucide-react-native';
 import Tutorial from '@/components/Tutorial';
+import { QrScanner } from '@/components/QrScanner';
 import {
   StyleSheet,
   Text,
@@ -14,15 +15,22 @@ import {
   TextInput,
   Modal,
   Linking,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import Constants from 'expo-constants';
 
 const WEB_VERSION_URL = 'https://spynetwork.ru';
 const APP_VERSION = Constants.expoConfig?.expo?.version ?? '1.0.2';
 
-export default function ProfileScreen() {
+type ProfileScreenProps = {
+  embedded?: boolean;
+};
+
+export default function ProfileScreen({ embedded }: ProfileScreenProps = {}) {
+  const shouldRedirectToSplitView = Platform.OS === 'web' && !embedded;
   const { phoneNumber, logout, dossiers, sectors, addSector, removeSector, updateSector, theme, currentTheme, switchTheme, t, currentLanguage, switchLanguage, resetTutorial, createBackup, restoreBackup } = useApp();
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -32,8 +40,8 @@ export default function ProfileScreen() {
   const [editedSectorName, setEditedSectorName] = useState('');
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
 
-  // Запрос уровня пользователя
   const levelQuery = trpc.appData.getMyLevel.useQuery(undefined, {
     enabled: !!phoneNumber,
     staleTime: 30_000,
@@ -52,13 +60,13 @@ export default function ProfileScreen() {
 
   const handleGetAccess = () => {
     Alert.alert(
-      currentLanguage === 'ru' ? 'ПОЛУЧИТЬ ДОПУСК' : 'GET ACCESS',
+      currentLanguage === 'ru' ? 'ПОВЫШЕНИЕ ДОПУСКА' : 'UPGRADE ACCESS',
       currentLanguage === 'ru'
-        ? 'Уровень 2 снимает лимит контактов и убирает рекламу. Подписка 99 руб./неделя. Оформить можно в веб-версии.'
-        : 'Level 2 removes the contact limit and ads. Subscription 99 RUB/week. Available in the web version.',
+        ? `Ваш уровень допуска 1. Лимит контактов ${maxContacts}. Войдите в Ваш профиль на веб странице системы для повышения уровня допуска.`
+        : `Your clearance level is 1. Contact limit: ${maxContacts}. Log into your profile on the system web page to upgrade your clearance level.`,
       [
-        { text: 'OK', style: 'cancel' },
-        { text: currentLanguage === 'ru' ? 'Перейти на веб-версию' : 'Go to web version', onPress: openWebVersion },
+        { text: currentLanguage === 'ru' ? 'Закрыть' : 'Close', style: 'cancel' },
+        { text: currentLanguage === 'ru' ? 'Открыть веб-версию' : 'Open web version', onPress: openWebVersion },
       ]
     );
   };
@@ -183,6 +191,10 @@ export default function ProfileScreen() {
     }
   };
 
+  if (shouldRedirectToSplitView) {
+    return <Redirect href="/" />;
+  }
+
   return (
     <View style={[styles.background, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={currentTheme === 'spy' ? 'light-content' : 'dark-content'} />
@@ -248,7 +260,7 @@ export default function ProfileScreen() {
             </View>
             {subscribedUntil && (
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'ПОДПИСКА ДО' : 'SUBSCRIBED UNTIL'}</Text>
+                <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'ДОПУСК ДО' : 'ACCESS UNTIL'}</Text>
                 <Text style={styles.infoValue}>
                   {new Date(subscribedUntil).toLocaleDateString(currentLanguage === 'ru' ? 'ru-RU' : 'en-US')}
                 </Text>
@@ -273,12 +285,12 @@ export default function ProfileScreen() {
               <Crown size={20} color={theme.primary} strokeWidth={1.5} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.accessButtonTitle}>
-                  {currentLanguage === 'ru' ? 'ПОЛУЧИТЬ ДОПУСК' : 'GET ACCESS'}
+                  {currentLanguage === 'ru' ? 'ПОВЫСИТЬ ДОПУСК' : 'UPGRADE ACCESS'}
                 </Text>
                 <Text style={styles.accessButtonSubtitle}>
                   {currentLanguage === 'ru'
-                    ? 'Безлимит контактов, без рекламы — 99 руб./нед.'
-                    : 'Unlimited contacts, no ads — 99 RUB/week'}
+                    ? 'Повысьте допуск в веб-версии системы'
+                    : 'Upgrade your clearance in the web version'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -290,22 +302,31 @@ export default function ProfileScreen() {
                 <AlertTriangle size={16} color={theme.danger} strokeWidth={1.5} />
                 <Text style={styles.limitWarningText}>
                   {currentLanguage === 'ru'
-                    ? `Лимит контактов достигнут (${maxContacts}). Вам необходимо повысить допуск — перейдите на веб-версию.`
-                    : `Contact limit reached (${maxContacts}). You need to upgrade — go to the web version.`}
+                    ? `Ваш уровень допуска 1. Лимит контактов ${maxContacts}. Войдите в Ваш профиль на веб странице системы для повышения уровня допуска.`
+                    : `Your clearance level is 1. Contact limit: ${maxContacts}. Log into your profile on the system web page to upgrade your clearance level.`}
                 </Text>
               </View>
               <TouchableOpacity style={styles.webVersionLinkButton} onPress={openWebVersion} activeOpacity={0.7}>
                 <Text style={styles.webVersionLinkText}>
-                  {currentLanguage === 'ru' ? 'Перейти на веб-версию' : 'Go to web version'}
+                  {currentLanguage === 'ru' ? 'Открыть веб-версию' : 'Open web version'}
                 </Text>
               </TouchableOpacity>
             </View>
           )}
 
+          {Platform.OS !== 'web' && (
+            <TouchableOpacity style={styles.webVersionButton} onPress={() => setShowQrScanner(true)} activeOpacity={0.7}>
+              <QrCode size={20} color={theme.primary} strokeWidth={1.5} />
+              <Text style={styles.webVersionButtonText}>
+                {currentLanguage === 'ru' ? 'Войти в веб-версию по QR' : 'Log into web via QR'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={styles.webVersionButton} onPress={openWebVersion} activeOpacity={0.7}>
             <ExternalLink size={20} color={theme.primary} strokeWidth={1.5} />
             <Text style={styles.webVersionButtonText}>
-              {currentLanguage === 'ru' ? 'Перейти на веб-версию' : 'Go to web version'}
+              {currentLanguage === 'ru' ? 'Открыть веб-версию' : 'Open web version'}
             </Text>
           </TouchableOpacity>
 
@@ -635,6 +656,13 @@ export default function ProfileScreen() {
             </View>
           </View>
         </Modal>
+
+        {Platform.OS !== 'web' && (
+          <QrScanner
+            visible={showQrScanner}
+            onClose={() => setShowQrScanner(false)}
+          />
+        )}
 
         <Tutorial
           visible={showTutorial}

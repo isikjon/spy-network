@@ -58,8 +58,54 @@
                         <p>CLASSIFIED ACCESS — АВТОРИЗАЦИЯ</p>
                     </div>
 
+                    <!-- Auth method selector -->
+                    <div id="stepMethodSelect" class="auth-step">
+                        <div class="auth-methods">
+                            <button class="btn btn-auth btn-method" onclick="selectAuthMethod('qr')">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="2" y="2" width="8" height="8" rx="1"/>
+                                    <rect x="14" y="2" width="8" height="8" rx="1"/>
+                                    <rect x="2" y="14" width="8" height="8" rx="1"/>
+                                    <rect x="14" y="14" width="4" height="4"/>
+                                    <rect x="20" y="14" width="2" height="2"/>
+                                    <rect x="14" y="20" width="2" height="2"/>
+                                    <rect x="20" y="20" width="2" height="2"/>
+                                </svg>
+                                <span>> ВХОД ПО QR-КОДУ</span>
+                            </button>
+                            <p class="auth-hint" style="margin-bottom:20px">Отсканируйте QR-код в мобильном приложении</p>
+                            <button class="btn btn-auth btn-method btn-method-secondary" onclick="selectAuthMethod('phone')">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                                </svg>
+                                <span>> ВХОД ПО НОМЕРУ ТЕЛЕФОНА</span>
+                            </button>
+                            <p class="auth-hint">Верификация обратным звонком</p>
+                        </div>
+                    </div>
+
+                    <!-- QR Code step -->
+                    <div id="stepQr" class="auth-step" style="display:none">
+                        <div class="qr-container">
+                            <h2>ОТСКАНИРУЙТЕ QR-КОД</h2>
+                            <p class="calling-subtitle">Откройте приложение Spy Network на телефоне<br>и отсканируйте этот код</p>
+                            <div id="qrCodeWrap" class="qr-code-wrap">
+                                <div id="qrLoading" class="qr-loading">
+                                    <span class="auth-loader"></span>
+                                </div>
+                                <canvas id="qrCanvas"></canvas>
+                            </div>
+                            <div class="waiting-row">
+                                <span class="auth-loader-small"></span>
+                                <span>Ожидаем сканирование...</span>
+                            </div>
+                            <p id="qrTimer" class="retry-text"></p>
+                        </div>
+                        <button class="btn-link" onclick="cancelQrAuth()">← ВЫБРАТЬ ДРУГОЙ СПОСОБ</button>
+                    </div>
+
                     <!-- Step 1: Phone input -->
-                    <div id="stepPhone" class="auth-step">
+                    <div id="stepPhone" class="auth-step" style="display:none">
                         <div class="account-auth-form">
                             <div class="form-group">
                                 <label>НОМЕР ТЕЛЕФОНА</label>
@@ -74,6 +120,7 @@
                             </button>
                             <p class="auth-hint">Вам будет показан номер, на который нужно позвонить для подтверждения.</p>
                         </div>
+                        <button class="btn-link" onclick="backToMethodSelect()">← ВЫБРАТЬ ДРУГОЙ СПОСОБ</button>
                     </div>
 
                     <!-- Step 2: Calling -->
@@ -243,12 +290,16 @@
         </div>
     </footer>
 
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <script>
         var API_BASE = 'https://spynetwork.ru/api/trpc';
         var STORAGE_TOKEN = 'spy_session_token';
         var STORAGE_PHONE = 'spy_user_phone';
         var pollInterval = null;
+        var qrPollInterval = null;
+        var qrTimerInterval = null;
         var currentPhone = '';
+        var currentQrSessionId = '';
 
         function toggleMenu() {
             document.getElementById('mobileMenu').classList.toggle('active');
@@ -285,10 +336,12 @@
             return '7' + phoneInput.value.replace(/[^0-9]/g, '');
         }
 
-        async function trpcMutation(procedure, input) {
+        async function trpcMutation(procedure, input, token) {
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['x-user-auth'] = 'Bearer ' + token;
             var res = await fetch(API_BASE + '/' + procedure + '?batch=1', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: JSON.stringify({ '0': { json: input } })
             });
             var data = await res.json();
@@ -313,6 +366,135 @@
             var data = await res.json();
             return data[0].result.data.json;
         }
+
+        /* ========== Auth method selection ========== */
+
+        function selectAuthMethod(method) {
+            if (method === 'qr') {
+                startQrAuth();
+            } else {
+                showStep('stepPhone');
+                phoneInput.focus();
+            }
+        }
+
+        function backToMethodSelect() {
+            stopPolling();
+            stopQrPolling();
+            showStep('stepMethodSelect');
+        }
+
+        /* ========== QR Auth ========== */
+
+        async function startQrAuth() {
+            showStep('stepQr');
+            document.getElementById('qrLoading').style.display = 'flex';
+            document.getElementById('qrCanvas').style.display = 'none';
+
+            try {
+                var result = await trpcMutation('qrAuth.createSession', null);
+
+                if (result.ok) {
+                    currentQrSessionId = result.sessionId;
+                    renderQrCode('spynetwork://qr-auth/' + result.sessionId);
+                    document.getElementById('qrLoading').style.display = 'none';
+                    document.getElementById('qrCanvas').style.display = 'block';
+                    startQrTimer(result.expiresAt);
+                    startQrPolling();
+                } else {
+                    showError('Не удалось создать QR-сессию');
+                }
+            } catch (e) {
+                showError('Ошибка сети: ' + (e.message || 'попробуйте позже'));
+            }
+        }
+
+        function renderQrCode(data) {
+            var qr = qrcode(0, 'M');
+            qr.addData(data);
+            qr.make();
+
+            var canvas = document.getElementById('qrCanvas');
+            var ctx = canvas.getContext('2d');
+            var moduleCount = qr.getModuleCount();
+            var cellSize = 6;
+            var margin = 16;
+            var size = moduleCount * cellSize + margin * 2;
+
+            canvas.width = size;
+            canvas.height = size;
+
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, size, size);
+
+            ctx.fillStyle = '#00ff41';
+            for (var row = 0; row < moduleCount; row++) {
+                for (var col = 0; col < moduleCount; col++) {
+                    if (qr.isDark(row, col)) {
+                        ctx.fillRect(margin + col * cellSize, margin + row * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+        }
+
+        function startQrPolling() {
+            stopQrPolling();
+            qrPollInterval = setInterval(async function() {
+                if (!currentQrSessionId) return;
+                try {
+                    var result = await trpcQuery('qrAuth.checkSession', { sessionId: currentQrSessionId });
+
+                    if (result.ok === true) {
+                        stopQrPolling();
+                        localStorage.setItem(STORAGE_TOKEN, result.token);
+                        localStorage.setItem(STORAGE_PHONE, result.phone);
+                        showDashboard();
+                    } else if (result.error === 'EXPIRED' || result.error === 'NOT_FOUND') {
+                        stopQrPolling();
+                        showError('QR-код истёк. Попробуйте снова.');
+                    }
+                } catch (e) {
+                    // network error, keep polling
+                }
+            }, 2000);
+        }
+
+        function stopQrPolling() {
+            if (qrPollInterval) {
+                clearInterval(qrPollInterval);
+                qrPollInterval = null;
+            }
+            if (qrTimerInterval) {
+                clearInterval(qrTimerInterval);
+                qrTimerInterval = null;
+            }
+            currentQrSessionId = '';
+        }
+
+        function startQrTimer(expiresAt) {
+            var timerEl = document.getElementById('qrTimer');
+            if (qrTimerInterval) clearInterval(qrTimerInterval);
+
+            function updateTimer() {
+                var remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+                var min = Math.floor(remaining / 60);
+                var sec = remaining % 60;
+                timerEl.textContent = 'Код действителен: ' + min + ':' + (sec < 10 ? '0' : '') + sec;
+                if (remaining <= 0) {
+                    clearInterval(qrTimerInterval);
+                    timerEl.textContent = 'Код истёк';
+                }
+            }
+            updateTimer();
+            qrTimerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function cancelQrAuth() {
+            stopQrPolling();
+            backToMethodSelect();
+        }
+
+        /* ========== Phone Auth ========== */
 
         async function requestCall() {
             var phone = getFullPhone();
@@ -376,21 +558,24 @@
             }
         }
 
+        /* ========== Common UI ========== */
+
         function showStep(stepId) {
             document.querySelectorAll('.auth-step').forEach(function(el) { el.style.display = 'none'; });
             document.getElementById(stepId).style.display = 'block';
         }
 
         function showError(msg) {
+            stopPolling();
+            stopQrPolling();
             document.getElementById('errorMessage').textContent = msg;
             showStep('stepError');
         }
 
         function resetAuth() {
             stopPolling();
-            showStep('stepPhone');
-            phoneInput.value = '';
-            phoneInput.focus();
+            stopQrPolling();
+            showStep('stepMethodSelect');
         }
 
         async function showDashboard() {
