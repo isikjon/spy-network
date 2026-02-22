@@ -618,6 +618,24 @@
                         document.getElementById('subscriptionActive').style.display = 'block';
                         var untilD = new Date(level.subscribedUntil);
                         document.getElementById('subscriptionUntil').textContent = 'Допуск уровня 2 активен до ' + untilD.toLocaleDateString('ru-RU');
+
+                        try {
+                            var payStatus = await trpcQuery('payment.getStatus', null, token, phone);
+                            if (payStatus.ok) {
+                                var cancelBtn = document.querySelector('.btn-cancel-sub');
+                                if (payStatus.autoRenew) {
+                                    document.getElementById('dashSubscription').textContent = 'АКТИВНА до ' + untilD.toLocaleDateString('ru-RU') + ' (автопродление)';
+                                    if (cancelBtn) cancelBtn.textContent = 'ОТМЕНИТЬ АВТОПРОДЛЕНИЕ';
+                                } else {
+                                    document.getElementById('dashSubscription').textContent = 'АКТИВНА до ' + untilD.toLocaleDateString('ru-RU') + ' (без продления)';
+                                    if (cancelBtn) {
+                                        cancelBtn.textContent = 'АВТОПРОДЛЕНИЕ ОТКЛЮЧЕНО';
+                                        cancelBtn.disabled = true;
+                                        cancelBtn.style.opacity = '0.5';
+                                    }
+                                }
+                            }
+                        } catch (e) {}
                     } else {
                         document.getElementById('subscriptionCTA').style.display = 'block';
                         document.getElementById('subscriptionActive').style.display = 'none';
@@ -656,13 +674,69 @@
             resetAuth();
         }
 
-        function handleSubscribe() {
-            alert('Платёжная система ЮKassa подключается. Скоро здесь будет оплата.');
+        async function handleSubscribe() {
+            var token = localStorage.getItem(STORAGE_TOKEN);
+            if (!token) {
+                alert('Необходимо войти в систему');
+                return;
+            }
+
+            var btn = document.querySelector('.btn-subscribe');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'СОЗДАНИЕ ПЛАТЕЖА...';
+            }
+
+            try {
+                var result = await trpcMutation('payment.createPayment', {
+                    returnUrl: window.location.origin + '/account.html?payment=success'
+                }, token);
+
+                if (result.ok) {
+                    if (result.status === 'succeeded') {
+                        alert('Подписка активирована!');
+                        showDashboard();
+                    } else if (result.confirmationUrl) {
+                        window.location.href = result.confirmationUrl;
+                    } else {
+                        alert('Платёж создан, но ссылка на оплату не получена. Попробуйте снова.');
+                    }
+                } else {
+                    var errors = {
+                        ALREADY_SUBSCRIBED: 'У вас уже активна подписка уровня 2',
+                        UNAUTHENTICATED: 'Необходимо войти в систему',
+                        PAYMENT_ERROR: 'Ошибка платёжной системы: ' + (result.detail || 'попробуйте позже')
+                    };
+                    alert(errors[result.error] || 'Ошибка: ' + result.error);
+                }
+            } catch (e) {
+                alert('Ошибка сети: ' + (e.message || 'попробуйте позже'));
+            }
+
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'ОФОРМИТЬ ПОДПИСКУ — 99 ₽/НЕД.';
+            }
         }
 
-        function handleCancelSubscription() {
-            if (confirm('Вы уверены? Доступ к уровню 2 сохранится до конца оплаченного периода.')) {
-                alert('Функция отмены будет доступна после подключения ЮKassa.');
+        async function handleCancelSubscription() {
+            if (!confirm('Вы уверены? Автопродление будет отключено. Доступ к уровню 2 сохранится до конца оплаченного периода.')) {
+                return;
+            }
+
+            var token = localStorage.getItem(STORAGE_TOKEN);
+            if (!token) return;
+
+            try {
+                var result = await trpcMutation('payment.cancelAutoRenew', null, token);
+                if (result.ok) {
+                    alert('Автопродление отключено. Подписка действует до конца оплаченного периода.');
+                    showDashboard();
+                } else {
+                    alert('Ошибка: ' + (result.error || 'попробуйте позже'));
+                }
+            } catch (e) {
+                alert('Ошибка сети: ' + (e.message || 'попробуйте позже'));
             }
         }
 
@@ -671,6 +745,14 @@
             var phone = localStorage.getItem(STORAGE_PHONE);
             if (token && phone) {
                 showDashboard();
+
+                var urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('payment') === 'success') {
+                    history.replaceState(null, '', window.location.pathname);
+                    setTimeout(function() {
+                        showDashboard();
+                    }, 1500);
+                }
             }
         })();
     </script>

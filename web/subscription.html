@@ -401,24 +401,83 @@
     </footer>
 
     <script>
+        var API_BASE = 'https://spynetwork.ru/api/trpc';
+        var STORAGE_TOKEN = 'spy_session_token';
+
         function toggleMenu() {
-            const menu = document.getElementById('mobileMenu');
+            var menu = document.getElementById('mobileMenu');
             menu.classList.toggle('active');
         }
 
-        document.querySelectorAll('.mobile-menu a').forEach(link => {
-            link.addEventListener('click', () => {
+        document.querySelectorAll('.mobile-menu a').forEach(function(link) {
+            link.addEventListener('click', function() {
                 document.getElementById('mobileMenu').classList.remove('active');
             });
         });
 
         function toggleFaq(element) {
-            const item = element.parentElement;
+            var item = element.parentElement;
             item.classList.toggle('active');
         }
 
-        function handleSubscribe() {
-            window.location.href = 'account.html';
+        async function trpcMutation(procedure, input, token) {
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['x-user-auth'] = 'Bearer ' + token;
+            var res = await fetch(API_BASE + '/' + procedure + '?batch=1', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ '0': { json: input } })
+            });
+            var data = await res.json();
+            return data[0].result.data.json;
+        }
+
+        async function handleSubscribe() {
+            var token = localStorage.getItem(STORAGE_TOKEN);
+            if (!token) {
+                window.location.href = 'account.html';
+                return;
+            }
+
+            var btn = document.querySelector('.btn-subscribe');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'СОЗДАНИЕ ПЛАТЕЖА...';
+            }
+
+            try {
+                var result = await trpcMutation('payment.createPayment', {
+                    returnUrl: window.location.origin + '/account.html?payment=success'
+                }, token);
+
+                if (result.ok) {
+                    if (result.status === 'succeeded') {
+                        alert('Подписка активирована!');
+                        window.location.href = 'account.html';
+                    } else if (result.confirmationUrl) {
+                        window.location.href = result.confirmationUrl;
+                    } else {
+                        alert('Ошибка: ссылка на оплату не получена. Попробуйте позже.');
+                    }
+                } else {
+                    if (result.error === 'ALREADY_SUBSCRIBED') {
+                        alert('У вас уже активна подписка уровня 2');
+                        window.location.href = 'account.html';
+                    } else if (result.error === 'UNAUTHENTICATED') {
+                        alert('Для оформления подписки необходимо войти в систему');
+                        window.location.href = 'account.html';
+                    } else {
+                        alert('Ошибка: ' + (result.detail || result.error));
+                    }
+                }
+            } catch (e) {
+                alert('Ошибка сети: ' + (e.message || 'попробуйте позже'));
+            }
+
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'ОФОРМИТЬ ПОДПИСКУ';
+            }
         }
     </script>
 </body>

@@ -8,6 +8,7 @@ import { ADMIN_HTML } from "./admin-page";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import { handlePlusofonWebhook } from "./trpc/routes/phone-auth";
+import { handleYuKassaWebhook } from "./trpc/routes/payment";
 
 const app = new Hono();
 
@@ -48,6 +49,19 @@ app.post("/auth/webhook/plusofon", async (c) => {
     return c.json({ ok });
   } catch (e) {
     console.error("[webhook] plusofon error", e);
+    return c.json({ ok: false }, 400);
+  }
+});
+
+// Вебхук от ЮKassa (уведомление об оплате)
+app.post("/payment/webhook/yukassa", async (c) => {
+  try {
+    const body = (await c.req.json()) as Record<string, unknown>;
+    console.log("[webhook] yukassa incoming:", JSON.stringify(body));
+    const ok = await handleYuKassaWebhook(body);
+    return c.json({ ok });
+  } catch (e) {
+    console.error("[webhook] yukassa error", e);
     return c.json({ ok: false }, 400);
   }
 });
