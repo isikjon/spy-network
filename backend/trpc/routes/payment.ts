@@ -107,26 +107,13 @@ export const paymentRouter = createTRPCRouter({
       try {
         const sub = await storeGet<SubscriptionData>(subscriptionKey(phone));
 
-        let paymentBody: Record<string, unknown>;
-
-        if (sub?.paymentMethodId && sub.autoRenew) {
-          paymentBody = {
-            amount: { value: SUBSCRIPTION_PRICE, currency: SUBSCRIPTION_CURRENCY },
-            capture: true,
-            payment_method_id: sub.paymentMethodId,
-            description: `Spy Network — Уровень 2 (продление, ${SUBSCRIPTION_DAYS} дней)`,
-            metadata: { phone, type: "renewal" },
-          };
-        } else {
-          paymentBody = {
-            amount: { value: SUBSCRIPTION_PRICE, currency: SUBSCRIPTION_CURRENCY },
-            confirmation: { type: "redirect", return_url: returnUrl },
-            capture: true,
-            save_payment_method: true,
-            description: `Spy Network — Уровень 2 (${SUBSCRIPTION_DAYS} дней)`,
-            metadata: { phone, type: "initial" },
-          };
-        }
+        const paymentBody: Record<string, unknown> = {
+          amount: { value: SUBSCRIPTION_PRICE, currency: SUBSCRIPTION_CURRENCY },
+          confirmation: { type: "redirect", return_url: returnUrl },
+          capture: true,
+          description: `Spy Network — Уровень 2 (${SUBSCRIPTION_DAYS} дней)`,
+          metadata: { phone, type: "initial" },
+        };
 
         const payment = await yukassaRequest<{
           id: string;
