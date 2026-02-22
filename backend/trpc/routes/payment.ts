@@ -107,12 +107,27 @@ export const paymentRouter = createTRPCRouter({
       try {
         const sub = await storeGet<SubscriptionData>(subscriptionKey(phone));
 
+        const customerPhone = phone.startsWith("7") ? phone : "7" + phone;
+
         const paymentBody: Record<string, unknown> = {
           amount: { value: SUBSCRIPTION_PRICE, currency: SUBSCRIPTION_CURRENCY },
           confirmation: { type: "redirect", return_url: returnUrl },
           capture: true,
           description: `Spy Network — Уровень 2 (${SUBSCRIPTION_DAYS} дней)`,
           metadata: { phone, type: "initial" },
+          receipt: {
+            customer: { phone: customerPhone },
+            items: [
+              {
+                description: "Подписка Spy Network — Уровень 2 (7 дней)",
+                quantity: "1.00",
+                amount: { value: SUBSCRIPTION_PRICE, currency: SUBSCRIPTION_CURRENCY },
+                vat_code: 1,
+                payment_subject: "service",
+                payment_mode: "full_payment",
+              },
+            ],
+          },
         };
 
         const payment = await yukassaRequest<{
