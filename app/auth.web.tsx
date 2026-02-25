@@ -66,7 +66,7 @@ export default function WebAuthScreen() {
           setStep('done');
           try {
             await loginWithToken(result.phone, result.token);
-            setTimeout(() => router.replace('/'), 600);
+            setTimeout(() => router.replace('/(tabs)/profile'), 600);
           } catch {
             setStep('error');
             setErrorMsg('Ошибка сохранения сессии');
