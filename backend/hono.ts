@@ -115,6 +115,29 @@ app.get("/payment/success", (c) => {
 </html>`);
 });
 
+// Expo web app (собранные статические файлы) — доступна по /app
+app.use(
+  "/app/*",
+  serveStatic({
+    root: "dist",
+    rewriteRequestPath: (path) => {
+      const stripped = path.replace(/^\/app/, "") || "/index.html";
+      return stripped || "/index.html";
+    },
+  }),
+);
+
+// SPA fallback: любой /app/... маршрут отдаёт index.html (Expo Router обработает на клиенте)
+app.get("/app/*", async (c) => {
+  const fs = await import("node:fs/promises");
+  try {
+    const html = await fs.readFile("dist/index.html", "utf-8");
+    return c.html(html);
+  } catch {
+    return c.text("App not built. Run: npx expo export --platform web", 404);
+  }
+});
+
 // Статика из web/: главная, страницы, форма админки (admin.html)
 app.use(
   "*",
