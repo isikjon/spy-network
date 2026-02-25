@@ -113,7 +113,8 @@ export const paymentRouter = createTRPCRouter({
     const result = await createYooKassaPayment(ctx.userPhone, creds.shopId, creds.secretKey, returnUrl);
 
     if (!result.ok) {
-      return { ok: false as const, error: result.error as any };
+      const errResult = result as { ok: false; error: string };
+      return { ok: false as const, error: errResult.error };
     }
 
     const pending: PendingPayment = {
