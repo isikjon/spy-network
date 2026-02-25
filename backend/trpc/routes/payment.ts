@@ -36,8 +36,8 @@ function paymentKey(paymentId: string): string {
 }
 
 function getYooKassaCredentials(): { shopId: string; secretKey: string } | null {
-  const shopId = process.env.YOOKASSA_SHOP_ID;
-  const secretKey = process.env.YOOKASSA_SECRET_KEY;
+  const shopId = process.env.YOOKASSA_SHOP_ID ?? process.env.YUKASSA_SHOP_ID;
+  const secretKey = process.env.YOOKASSA_SECRET_KEY ?? process.env.YUKASSA_SECRET_KEY;
   if (!shopId || !secretKey) return null;
   return { shopId, secretKey };
 }
