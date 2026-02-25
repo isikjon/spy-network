@@ -92,8 +92,7 @@
     "web": {
       "favicon": "./assets/images/favicon.png",
       "output": "static",
-      "bundler": "metro",
-      "publicPath": "/app"
+      "bundler": "metro"
     },
     "experiments": {
       "typedRoutes": true

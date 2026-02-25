@@ -115,17 +115,33 @@ app.get("/payment/success", (c) => {
 </html>`);
 });
 
-// Expo web app (собранные статические файлы) — доступна по /app
+// Expo web app — JS/CSS бандлы и ассеты (Expo Router генерирует их по корневым путям)
+app.use("/_expo/*", serveStatic({ root: "dist" }));
+app.use("/assets/*", serveStatic({ root: "dist" }));
+app.get("/favicon.ico", serveStatic({ root: "dist", path: "/favicon.ico" }));
+
+// Expo web app — HTML страницы по /app/*
 app.use(
   "/app/*",
   serveStatic({
     root: "dist",
     rewriteRequestPath: (path) => {
-      const stripped = path.replace(/^\/app/, "") || "/index.html";
-      return stripped || "/index.html";
+      const stripped = path.replace(/^\/app/, "");
+      return stripped === "" || stripped === "/" ? "/index.html" : stripped;
     },
   }),
 );
+
+// Точный маршрут /app без слэша → отдаём index.html
+app.get("/app", async (c) => {
+  const fs = await import("node:fs/promises");
+  try {
+    const html = await fs.readFile("dist/index.html", "utf-8");
+    return c.html(html);
+  } catch {
+    return c.text("App not built. Run: npx expo export --platform web", 404);
+  }
+});
 
 // SPA fallback: любой /app/... маршрут отдаёт index.html (Expo Router обработает на клиенте)
 app.get("/app/*", async (c) => {
