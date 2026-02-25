@@ -80,6 +80,13 @@ function RootLayoutNav() {
         <Stack.Screen name="auth" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="admin" options={{ headerShown: true }} />
+        <Stack.Screen
+          name="qr-confirm"
+          options={{
+            presentation: 'modal',
+            headerShown: false,
+          }}
+        />
       </Stack>
       <Tutorial
         visible={showTutorial}

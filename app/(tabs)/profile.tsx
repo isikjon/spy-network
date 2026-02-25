@@ -1,7 +1,7 @@
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle, CreditCard, Loader } from 'lucide-react-native';
 import Tutorial from '@/components/Tutorial';
 import {
   StyleSheet,
@@ -13,6 +13,9 @@ import {
   ScrollView,
   TextInput,
   Modal,
+  Linking,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -27,6 +30,7 @@ export default function ProfileScreen() {
   const [editedSectorName, setEditedSectorName] = useState('');
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
 
   // Запрос уровня пользователя
   const levelQuery = trpc.appData.getMyLevel.useQuery(undefined, {
@@ -42,15 +46,44 @@ export default function ProfileScreen() {
   const isAtLimit = maxContacts !== null && currentContacts >= maxContacts;
 
   const styles = createStyles(theme);
+  const createPaymentMutation = trpc.payment.createPayment.useMutation();
 
-  const handleGetAccess = () => {
+  const handleGetAccess = async () => {
+    // На вебе — запускаем оплату напрямую
+    if (Platform.OS === 'web') {
+      setPaymentLoading(true);
+      try {
+        const res = await createPaymentMutation.mutateAsync();
+        if (res.ok && res.paymentUrl) {
+          // Открываем страницу оплаты YooKassa в новой вкладке
+          window.open(res.paymentUrl, '_blank');
+        } else {
+          const errCode = (res as any).error;
+          const msg = errCode === 'NOT_CONFIGURED'
+            ? 'Оплата временно недоступна. Обратитесь в поддержку.'
+            : `Ошибка создания платежа: ${errCode || 'неизвестно'}`;
+          Alert.alert('ОШИБКА', msg, [{ text: 'OK' }]);
+        }
+      } catch (e: any) {
+        Alert.alert('ОШИБКА', e?.message || 'Ошибка сети', [{ text: 'OK' }]);
+      } finally {
+        setPaymentLoading(false);
+      }
+      return;
+    }
+
+    // На мобиле — информируем, что оплата в веб-версии
     Alert.alert(
       currentLanguage === 'ru' ? 'ПОЛУЧИТЬ ДОПУСК' : 'GET ACCESS',
       currentLanguage === 'ru'
-        ? 'Уровень 2 снимает лимит контактов и убирает рекламу. Подписка 99 руб./неделя. Оформить можно в веб-версии.'
-        : 'Level 2 removes the contact limit and ads. Subscription 99 RUB/week. Available in the web version.',
+        ? 'Уровень 2 снимает лимит контактов и убирает рекламу. Подписка 99 руб./неделя. Оформить можно в веб-версии spynetwork.ru'
+        : 'Level 2 removes the contact limit and ads. Subscription 99 RUB/week. Available at spynetwork.ru',
       [
         { text: 'OK', style: 'default' },
+        {
+          text: currentLanguage === 'ru' ? 'ОТКРЫТЬ' : 'OPEN',
+          onPress: () => Linking.openURL('https://spynetwork.ru'),
+        },
       ]
     );
   };
@@ -254,19 +287,28 @@ export default function ProfileScreen() {
 
           {userLevel < 2 && (
             <TouchableOpacity
-              style={styles.accessButton}
+              style={[styles.accessButton, paymentLoading && { opacity: 0.6 }]}
               onPress={handleGetAccess}
               activeOpacity={0.7}
+              disabled={paymentLoading}
             >
-              <Crown size={20} color={theme.primary} strokeWidth={1.5} />
+              {paymentLoading ? (
+                <ActivityIndicator color={theme.primary} size="small" />
+              ) : (
+                <CreditCard size={20} color={theme.primary} strokeWidth={1.5} />
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={styles.accessButtonTitle}>
                   {currentLanguage === 'ru' ? 'ПОЛУЧИТЬ ДОПУСК' : 'GET ACCESS'}
                 </Text>
                 <Text style={styles.accessButtonSubtitle}>
                   {currentLanguage === 'ru'
-                    ? 'Безлимит контактов, без рекламы — 99 руб./нед.'
-                    : 'Unlimited contacts, no ads — 99 RUB/week'}
+                    ? Platform.OS === 'web'
+                      ? 'Оплатить онлайн — 99 руб./нед. • Безлимит контактов'
+                      : 'Безлимит контактов, без рекламы — 99 руб./нед.'
+                    : Platform.OS === 'web'
+                      ? 'Pay online — 99 RUB/week • Unlimited contacts'
+                      : 'Unlimited contacts, no ads — 99 RUB/week'}
                 </Text>
               </View>
             </TouchableOpacity>

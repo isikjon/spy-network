@@ -8,6 +8,7 @@ import { ADMIN_HTML } from "./admin-page";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import { handlePlusofonWebhook } from "./trpc/routes/phone-auth";
+import { handleYooKassaWebhook } from "./trpc/routes/payment";
 
 const app = new Hono();
 
@@ -70,6 +71,48 @@ app.get("/admin", (c) => {
 
 app.get("/api/status", (c) => {
   return c.json({ status: "ok", message: "API is running" });
+});
+
+// Webhook от YooKassa — подтверждение оплаты
+app.post("/payment/webhook/yookassa", async (c) => {
+  try {
+    const body = (await c.req.json()) as Record<string, unknown>;
+    console.log("[webhook] yookassa incoming", JSON.stringify(body));
+    const ok = await handleYooKassaWebhook(body);
+    return c.json({ ok });
+  } catch (e) {
+    console.error("[webhook] yookassa error", e);
+    return c.json({ ok: false }, 400);
+  }
+});
+
+// Страница успешной оплаты (редирект после YooKassa)
+app.get("/payment/success", (c) => {
+  return c.html(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Оплата прошла успешно — Spy Network</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; color: #00FF41; font-family: monospace; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .box { text-align: center; padding: 40px; border: 2px solid #003311; max-width: 480px; }
+    h1 { font-size: 28px; letter-spacing: 4px; margin-bottom: 16px; }
+    p { color: #00AA2B; font-size: 14px; letter-spacing: 1px; line-height: 1.6; margin-bottom: 24px; }
+    a { display: inline-block; border: 2px solid #00FF41; padding: 12px 32px; color: #00FF41; text-decoration: none; letter-spacing: 2px; font-size: 14px; }
+    a:hover { background: rgba(0,255,65,0.1); }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div style="font-size:48px;margin-bottom:20px">✓</div>
+    <h1>ДОПУСК ПОЛУЧЕН</h1>
+    <p>Оплата прошла успешно.<br>Уровень 2 активирован на 7 дней.<br>Вернитесь в приложение — обновление произойдёт автоматически.</p>
+    <a href="/">← ВЕРНУТЬСЯ</a>
+  </div>
+</body>
+</html>`);
 });
 
 // Статика из web/: главная, страницы, форма админки (admin.html)
