@@ -41,6 +41,9 @@ yarn-error.*
 
 .rork
 
+# Backend runtime data (QR sessions, payments, store)
+data/
+
 .env
 rork-eslint.config.js
 
