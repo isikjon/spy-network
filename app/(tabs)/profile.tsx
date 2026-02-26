@@ -177,7 +177,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {Platform.OS === 'web' ? (
-            <View style={[styles.profileCard, styles.webBlockSpacing]}>
+            <View style={[styles.profileCard, styles.webBlockSpacing, styles.webBlockMinHeight]}>
               <View style={styles.webProfileRow}>
                 <View style={styles.webProfileColLeft}>
                   <View style={styles.avatar}>
@@ -269,7 +269,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
           )}
 
           {Platform.OS === 'web' && (
-            <View style={[styles.subscriptionContainer, styles.webBlockSpacing]}>
+            <View style={[styles.subscriptionContainer, styles.webBlockSpacing, styles.webBlockMinHeight]}>
               <View style={styles.subscriptionHeader}>
                 <View style={styles.subscriptionHeaderLeft}>
                   <CreditCard size={20} color={theme.primary} strokeWidth={1.5} />
@@ -369,7 +369,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
           )}
 
           {Platform.OS === 'web' && (
-            <View style={[styles.sectorsContainer, styles.webBlockSpacing]}>
+            <View style={[styles.sectorsContainer, styles.webBlockSpacing, styles.webBlockMinHeight]}>
               <View style={styles.sectorsHeader}>
                 <View style={styles.sectorsHeaderLeft}>
                   <Tag size={20} color={theme.primary} strokeWidth={1.5} />
@@ -865,6 +865,9 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   webBlockSpacing: {
     marginBottom: 24,
+  },
+  webBlockMinHeight: {
+    minHeight: 240,
   },
   webPhoneLast3: {
     fontSize: 48,
