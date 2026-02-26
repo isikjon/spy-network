@@ -124,7 +124,6 @@ export default function DossierScreen() {
 
   const autoSave = useCallback(() => {
     if (!id) return;
-    if (!isEditing) return;
 
     const currentDossier = dossierRef.current;
     if (!currentDossier) return;
@@ -152,8 +151,9 @@ export default function DossierScreen() {
           }
         : undefined,
     });
-  }, [editCircle, editCompany, editEmails, editGoal, editImportance, editName, editPhones, editPhoto, editPowerGroupName, editRelations, editSectors, editPosition, editSuzerainId, editVassalIds, id, isEditing, updateDossier]);
+  }, [editCircle, editCompany, editEmails, editGoal, editImportance, editName, editPhones, editPhoto, editPowerGroupName, editRelations, editSectors, editPosition, editSuzerainId, editVassalIds, id, updateDossier]);
 
+  // Автосохранение при изменении полей в режиме редактирования
   useEffect(() => {
     if (!isEditing) return;
 
@@ -176,6 +176,26 @@ export default function DossierScreen() {
       }
     };
   }, [autoSave, isEditing]);
+
+  // Автосохранение связей и группировок без режима редактирования
+  useEffect(() => {
+    if (isEditing) return;
+    if (!id || !dossierRef.current) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      autoSave();
+    }, 300);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [editRelations, editPowerGroupName, editSuzerainId, editVassalIds, isEditing, id, autoSave]);
 
   if (!dossier) {
     return (
