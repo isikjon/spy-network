@@ -72,6 +72,19 @@ async function createYooKassaPayment(
         description: `Spy Network ДОПУСК 2 (7 дней) — ${phone}`,
         metadata: { phone },
         capture: true,
+        receipt: {
+          customer: { phone },
+          items: [
+            {
+              description: "Подписка Spy Network — Допуск уровня 2 (7 дней)",
+              quantity: "1.00",
+              amount: { value: PRICE_RUB, currency: "RUB" },
+              vat_code: 1,
+              payment_subject: "service",
+              payment_mode: "full_payment",
+            },
+          ],
+        },
       }),
     });
 
