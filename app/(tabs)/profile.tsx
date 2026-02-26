@@ -177,17 +177,17 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {Platform.OS === 'web' ? (
-            <View style={styles.profileCard}>
+            <View style={[styles.profileCard, styles.webBlockSpacing]}>
               <View style={styles.webProfileRow}>
-                <View style={styles.avatar}>
-                  <Shield size={48} color={theme.primary} strokeWidth={1.5} />
-                </View>
-                <View style={styles.webProfileInfo}>
-                  <Text style={styles.webPhoneLast3}>{phoneNumber ? phoneNumber.slice(-3) : '---'}</Text>
+                <View style={styles.webProfileColLeft}>
+                  <View style={styles.avatar}>
+                    <Shield size={48} color={theme.primary} strokeWidth={1.5} />
+                  </View>
                   <Text style={styles.webClearanceLabel}>{t.profile.clearanceSection || 'ДОПУСК'}</Text>
-                  <Text style={styles.webClearanceLevel}>
-                    {t.profile.clearanceLevel} {subscriptionLevel === 'working' ? '2' : '1'}
-                  </Text>
+                </View>
+                <View style={styles.webProfileColRight}>
+                  <Text style={styles.webPhoneLast3}>{phoneNumber ? phoneNumber.slice(-3) : '---'}</Text>
+                  <Text style={styles.webClearanceLevel}>УРОВЕНЬ {subscriptionLevel === 'working' ? '2' : '1'}</Text>
                 </View>
               </View>
             </View>
@@ -268,42 +268,8 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
             </View>
           )}
 
-          <View style={styles.themeContainer}>
-            <View style={styles.themeHeader}>
-              <View style={styles.themeHeaderLeft}>
-                <Palette size={20} color={theme.primary} strokeWidth={1.5} />
-                <Text style={styles.themeTitle}>{t.profile.theme}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.themeButton}
-                onPress={() => setShowThemeModal(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.themeButtonText}>
-                  {currentTheme === 'spy' ? t.profile.spy : currentTheme === 'business' ? t.profile.business : t.profile.genesis}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.languageContainer}>
-            <View style={styles.languageHeader}>
-              <View style={styles.languageHeaderLeft}>
-                <Globe size={20} color={theme.primary} strokeWidth={1.5} />
-                <Text style={styles.languageTitle}>{t.profile.language}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.languageButton}
-                onPress={() => setShowLanguageModal(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.languageButtonText}>{currentLanguage === 'ru' ? t.profile.russian : t.profile.english}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
           {Platform.OS === 'web' && (
-            <View style={styles.subscriptionContainer}>
+            <View style={[styles.subscriptionContainer, styles.webBlockSpacing]}>
               <View style={styles.subscriptionHeader}>
                 <View style={styles.subscriptionHeaderLeft}>
                   <CreditCard size={20} color={theme.primary} strokeWidth={1.5} />
@@ -402,6 +368,82 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
             </View>
           )}
 
+          {Platform.OS === 'web' && (
+            <View style={[styles.sectorsContainer, styles.webBlockSpacing]}>
+              <View style={styles.sectorsHeader}>
+                <View style={styles.sectorsHeaderLeft}>
+                  <Tag size={20} color={theme.primary} strokeWidth={1.5} />
+                  <Text style={styles.sectorsTitle}>{t.profile.sectors}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => setShowAddModal(true)}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={18} color={theme.primary} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.sectorsList}>
+                {sectors.map((sector) => (
+                  <View key={sector} style={styles.sectorItem}>
+                    <Text style={styles.sectorName}>{sector.toUpperCase()}</Text>
+                    <View style={styles.sectorActions}>
+                      <TouchableOpacity
+                        onPress={() => handleEditSector(sector)}
+                        activeOpacity={0.7}
+                        style={styles.sectorActionButton}
+                      >
+                        <Edit2 size={14} color={theme.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteSector(sector)}
+                        activeOpacity={0.7}
+                        style={styles.sectorActionButton}
+                      >
+                        <Trash2 size={14} color={theme.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <View style={[styles.themeContainer, Platform.OS === 'web' && styles.webBlockSpacing]}>
+            <View style={styles.themeHeader}>
+              <View style={styles.themeHeaderLeft}>
+                <Palette size={20} color={theme.primary} strokeWidth={1.5} />
+                <Text style={styles.themeTitle}>{t.profile.theme}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.themeButton}
+                onPress={() => setShowThemeModal(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.themeButtonText}>
+                  {currentTheme === 'spy' ? t.profile.spy : currentTheme === 'business' ? t.profile.business : t.profile.genesis}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.languageContainer}>
+            <View style={styles.languageHeader}>
+              <View style={styles.languageHeaderLeft}>
+                <Globe size={20} color={theme.primary} strokeWidth={1.5} />
+                <Text style={styles.languageTitle}>{t.profile.language}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.languageButton}
+                onPress={() => setShowLanguageModal(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.languageButtonText}>{currentLanguage === 'ru' ? t.profile.russian : t.profile.english}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {Platform.OS !== 'web' && (
           <View style={styles.sectorsContainer}>
             <View style={styles.sectorsHeader}>
               <View style={styles.sectorsHeaderLeft}>
@@ -440,6 +482,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
               ))}
             </View>
           </View>
+          )}
 
           <View style={styles.backupContainer}>
             <View style={styles.backupHeader}>
@@ -809,12 +852,19 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   webProfileRow: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 20,
+    alignItems: 'flex-start' as const,
+    gap: 24,
   },
-  webProfileInfo: {
+  webProfileColLeft: {
+    alignItems: 'center' as const,
+  },
+  webProfileColRight: {
     flex: 1,
     alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  webBlockSpacing: {
+    marginBottom: 24,
   },
   webPhoneLast3: {
     fontSize: 48,
@@ -837,6 +887,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.primary,
     fontFamily: 'monospace' as const,
     letterSpacing: 2,
+    marginTop: 4,
   },
   statsContainer: {
     flexDirection: 'row',

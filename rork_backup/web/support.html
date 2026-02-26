@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Центр поддержки пользователей приложения PRO Network">
+    <title>Поддержка - PRO Network</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="pages.css">
+    <link rel="icon" type="image/png" href="favicon.png">
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div class="grid-overlay"></div>
+    
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="logo">
+                <span class="logo-icon">◆</span>
+                <span class="logo-text">PRO Network</span>
+            </a>
+            <div class="nav-links">
+                <a href="index.html">ГЛАВНАЯ</a>
+                <a href="privacy.html">КОНФИДЕНЦИАЛЬНОСТЬ</a>
+                <a href="support.html" class="active">ПОДДЕРЖКА</a>
+                <a href="admin.html" class="nav-admin">ADMIN</a>
+            </div>
+            <button class="mobile-menu-btn" onclick="toggleMenu()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html">ГЛАВНАЯ</a>
+        <a href="privacy.html">КОНФИДЕНЦИАЛЬНОСТЬ</a>
+        <a href="support.html">ПОДДЕРЖКА</a>
+        <a href="admin.html">ADMIN</a>
+    </div>
+
+    <main class="page-content">
+        <div class="page-header">
+            <div class="breadcrumb">
+                <a href="index.html">ГЛАВНАЯ</a>
+                <span>/</span>
+                <span>ПОДДЕРЖКА</span>
+            </div>
+            <h1>ЦЕНТР ПОДДЕРЖКИ</h1>
+            <p class="page-meta">Мы готовы помочь вам с любыми вопросами</p>
+        </div>
+
+        <div class="terms-content">
+            <div class="support-grid">
+                <div class="support-card">
+                    <div class="support-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                    </div>
+                    <h3>FAQ</h3>
+                    <p>Ответы на часто задаваемые вопросы о работе приложения и его функциях.</p>
+                    <a href="#faq" class="btn btn-secondary">ПЕРЕЙТИ К FAQ</a>
+                </div>
+
+                <div class="support-card">
+                    <div class="support-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                            <polyline points="22,6 12,13 2,6"/>
+                        </svg>
+                    </div>
+                    <h3>EMAIL ПОДДЕРЖКА</h3>
+                    <p>Напишите нам, и мы ответим в течение 24 часов в рабочие дни.</p>
+                    <a href="/cdn-cgi/l/email-protection#26555356564954526655565f4843525149544d08475656" class="btn btn-secondary">НАПИСАТЬ</a>
+                </div>
+
+                <div class="support-card">
+                    <div class="support-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                        </svg>
+                    </div>
+                    <h3>ДОКУМЕНТАЦИЯ</h3>
+                    <p>Руководство пользователя и описание всех функций приложения.</p>
+                    <a href="#guide" class="btn btn-secondary">ЧИТАТЬ</a>
+                </div>
+            </div>
+
+            <section id="faq" class="faq-section">
+                <div class="section-header">
+                    <div class="section-line"></div>
+                    <h2>ЧАСТО ЗАДАВАЕМЫЕ ВОПРОСЫ</h2>
+                    <div class="section-line"></div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Как добавить новый контакт?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>
+                            Перейдите на вкладку "Досье" и нажмите кнопку с иконкой контактов внизу экрана. 
+                            Вы можете импортировать контакт из адресной книги телефона или создать новый вручную 
+                            (на веб-версии). После импорта откроется карточка редактирования, где вы можете 
+                            дополнить информацию.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Где хранятся мои данные?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>
+                            Все ваши данные хранятся локально на вашем устройстве. Мы не имеем доступа к вашей 
+                            информации и не храним её на серверах. Это обеспечивает максимальную приватность 
+                            и безопасность ваших контактов.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Как создать резервную копию?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>
+                            Перейдите в раздел "Профиль" и найдите секцию "Резервное копирование". 
+                            Нажмите "Создать резервную копию" — файл будет сохранён на вашем устройстве. 
+                            Для восстановления используйте кнопку "Восстановить из копии".
+                        </p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Что такое властные группировки?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>
+                            Властные группировки позволяют структурировать контакты по иерархии влияния. 
+                            Вы можете назначить "сюзерена" (лидера группы) и добавить "вассалов" (подчинённых). 
+                            Это помогает визуализировать политические и деловые связи в вашей сети.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Как использовать карту сети?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>
+                            Перейдите на вкладку "Сеть" для просмотра визуализации связей. 
+                            Используйте жесты для масштабирования карты. Применяйте фильтры по секторам 
+                            и властным группировкам для отображения нужных контактов. 
+                            Нажмите на контакт для перехода к его досье.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Как добавить связь между контактами?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>
+                            Откройте досье контакта и найдите раздел "Известные связи". 
+                            Нажмите "Добавить связь", выберите контакт из списка и укажите силу связи от 1 до 10. 
+                            Связи будут отображаться на карте сети.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Как сменить тему оформления?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>
+                            Перейдите в "Профиль" и найдите настройку "Тема". Доступны три варианта: 
+                            "Агент" (классический шпионский стиль), "Бизнес" (светлая профессиональная тема) 
+                            и "Генезис" (тёмная тема с золотистыми акцентами).
+                        </p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(this)">
+                        <h4>Приложение работает без интернета?</h4>
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>
+                            Да, приложение полностью работает офлайн. Все данные хранятся локально, 
+                            поэтому вы можете просматривать и редактировать контакты без подключения к интернету.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="guide">
+                <div class="section-header" style="margin-top: 60px;">
+                    <div class="section-line"></div>
+                    <h2>РУКОВОДСТВО</h2>
+                    <div class="section-line"></div>
+                </div>
+
+                <div class="highlight-box">
+                    <h4>ВСТРОЕННОЕ ОБУЧЕНИЕ</h4>
+                    <p>
+                        В приложении есть встроенное интерактивное обучение. Вы можете запустить его 
+                        в любой момент через раздел "Профиль" → "Обучение". Обучение покрывает все 
+                        основные функции приложения.
+                    </p>
+                </div>
+
+                <h3 style="margin-top: 32px;">ОСНОВНЫЕ ФУНКЦИИ</h3>
+                <ul>
+                    <li><strong>Досье:</strong> Создание и управление карточками контактов</li>
+                    <li><strong>Секторы:</strong> Категоризация контактов по сферам деятельности</li>
+                    <li><strong>Функциональные круги:</strong> Поддержка, Продуктивность, Развитие</li>
+                    <li><strong>Важность:</strong> Приоритизация контактов (Критичный, Высокий, Средний, Низкий)</li>
+                    <li><strong>Связи:</strong> Отслеживание отношений между контактами</li>
+                    <li><strong>Властные группировки:</strong> Иерархии влияния (сюзерены и вассалы)</li>
+                    <li><strong>Дневник:</strong> Записи о взаимодействиях с контактами</li>
+                    <li><strong>Карта сети:</strong> Визуализация всех связей</li>
+                </ul>
+            </section>
+
+            <div class="contact-section">
+                <h3>НЕ НАШЛИ ОТВЕТ?</h3>
+                <p>Свяжитесь с нашей командой поддержки, и мы поможем вам</p>
+                <a href="/cdn-cgi/l/email-protection#a8dbddd8d8c7dadce8dbd8d1c6cddcdfc7dac386c9d8d8" class="contact-email"><span class="__cf_email__" data-cfemail="7a090f0a0a15080e3a090a03141f0e0d150811541b0a0a">[email&#160;protected]</span></a>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-bottom">
+            <p>&copy; 2024 PRO Network. Все права защищены.</p>
+            <div class="footer-nav">
+                <a href="index.html">Главная</a>
+                <a href="privacy.html">Конфиденциальность</a>
+                <a href="support.html">Поддержка</a>
+            </div>
+        </div>
+    </footer>
+
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+        function toggleMenu() {
+            document.getElementById('mobileMenu').classList.toggle('active');
+        }
+
+        function toggleFaq(element) {
+            const item = element.parentElement;
+            item.classList.toggle('active');
+        }
+    </script>
+</body>
+</html>
