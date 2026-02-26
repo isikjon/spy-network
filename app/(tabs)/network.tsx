@@ -21,7 +21,9 @@ import { useRouter } from 'expo-router';
 import { Sector, ContactDossier, FunctionalCircle } from '@/types';
 
 const { width, height } = Dimensions.get('window');
-const MAP_SIZE = Math.min(width, height * 0.67);
+const MAP_SIZE = Platform.OS === 'web'
+  ? Math.min(width * 0.45, height * 0.6)
+  : Math.min(width, height * 0.67);
 
 export default function NetworkScreen() {
   const { dossiers, sectors, theme, powerGroupings, t, currentTheme } = useApp();
@@ -42,9 +44,11 @@ export default function NetworkScreen() {
 
   const panStartOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  const mapBaseSize = isFullscreenMap ? Math.min(winWidth, winHeight) : MAP_SIZE;
-  const canvasWidth = isFullscreenMap ? winWidth : MAP_SIZE;
-  const canvasHeight = isFullscreenMap ? winHeight : MAP_SIZE;
+  const webMapSize = Platform.OS === 'web' ? Math.min(winWidth * 0.45, winHeight * 0.55) : MAP_SIZE;
+  const effectiveMapSize = Platform.OS === 'web' ? webMapSize : MAP_SIZE;
+  const mapBaseSize = isFullscreenMap ? Math.min(winWidth, winHeight) : effectiveMapSize;
+  const canvasWidth = isFullscreenMap ? winWidth : effectiveMapSize;
+  const canvasHeight = isFullscreenMap ? winHeight : effectiveMapSize;
   const centerX = canvasWidth / 2;
   const centerY = canvasHeight / 2;
 
@@ -975,7 +979,12 @@ export default function NetworkScreen() {
             scrollEnabled={!isFullscreenMap}
           >
             {!isFullscreenMap ? (
-              renderMap(styles.visualization, 'network-map')
+              renderMap(
+                Platform.OS === 'web'
+                  ? [styles.visualization, { width: canvasWidth, height: canvasHeight }]
+                  : styles.visualization,
+                'network-map'
+              )
             ) : (
               <View
                 style={[styles.visualizationPlaceholder, { height: MAP_SIZE }]}
