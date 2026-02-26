@@ -8,11 +8,17 @@
     "scheme": "rork-app",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "plugins": [
+      "plugins": [
       [
         "expo-router",
         {
           "origin": "https://rork.com/"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Spy Network to access your camera to scan QR codes."
         }
       ],
       "expo-font",

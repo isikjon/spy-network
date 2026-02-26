@@ -142,8 +142,7 @@ export default function WebAuthScreen() {
           {/* Header */}
           <View style={styles.header}>
             <Shield size={52} color={theme.primary} strokeWidth={1.5} />
-            <Text style={styles.title}>CLASSIFIED{'\n'}ACCESS</Text>
-            <Text style={styles.subtitle}>NETWORK INTELLIGENCE SYSTEM</Text>
+            <Text style={styles.title}>Вход в Spy Network Web</Text>
           </View>
 
           {/* Content */}

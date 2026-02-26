@@ -87,6 +87,13 @@ function RootLayoutNav() {
             headerShown: false,
           }}
         />
+        <Stack.Screen
+          name="qr-scanner"
+          options={{
+            presentation: 'modal',
+            headerShown: false,
+          }}
+        />
       </Stack>
       <Tutorial
         visible={showTutorial}

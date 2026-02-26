@@ -1,7 +1,7 @@
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle, CreditCard, Loader } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle, CreditCard, QrCode, Monitor } from 'lucide-react-native';
 import Tutorial from '@/components/Tutorial';
 import {
   StyleSheet,
@@ -224,11 +224,31 @@ export default function ProfileScreen() {
             <View style={styles.avatar}>
               <Shield size={48} color={theme.primary} strokeWidth={1.5} />
             </View>
-            <Text style={styles.agentTitle}>{t.profile.agent}</Text>
             <View style={styles.phoneContainer}>
               <Phone size={16} color={theme.primaryDim} />
               <Text style={styles.phoneText}>{phoneNumber}</Text>
             </View>
+          </View>
+
+          {/* Инфо-блок про веб-версию + кнопка QR */}
+          <View style={styles.webInfoBlock}>
+            <View style={styles.webInfoHeader}>
+              <Monitor size={18} color={theme.primary} strokeWidth={1.5} />
+              <Text style={styles.webInfoTitle}>ВЕБ-ВЕРСИЯ</Text>
+            </View>
+            <Text style={styles.webInfoText}>
+              Для запуска программы на компьютере войдите на сайт{' '}
+              <Text style={styles.webInfoLink}>www.spynetwork.ru</Text>{' '}
+              и авторизуйтесь в системе, отсканировав QR код. В Web версии доступно расширенное управление профилем.
+            </Text>
+            <TouchableOpacity
+              style={styles.qrScanButton}
+              onPress={() => router.push('/qr-scanner')}
+              activeOpacity={0.7}
+            >
+              <QrCode size={20} color={theme.background} strokeWidth={2} />
+              <Text style={styles.qrScanButtonText}>СКАНИРОВАТЬ QR КОД</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.statsContainer}>
@@ -259,8 +279,8 @@ export default function ProfileScreen() {
               <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'ДОПУСК' : 'CLEARANCE'}</Text>
               <Text style={[styles.infoValue, userLevel >= 2 && { color: theme.primary }]}>
                 {currentLanguage === 'ru'
-                  ? (userLevel >= 2 ? 'УРОВЕНЬ 2 (ПРЕМИУМ)' : 'УРОВЕНЬ 1 (СТАНДАРТ)')
-                  : (userLevel >= 2 ? 'LEVEL 2 (PREMIUM)' : 'LEVEL 1 (STANDARD)')}
+                  ? (userLevel >= 2 ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1')
+                  : (userLevel >= 2 ? 'LEVEL 2' : 'LEVEL 1')}
               </Text>
             </View>
             <View style={styles.infoRow}>
@@ -763,6 +783,53 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     color: theme.textSecondary,
     fontFamily: 'monospace' as const,
+  },
+  webInfoBlock: {
+    borderWidth: 2,
+    borderColor: theme.primary,
+    backgroundColor: theme.overlay,
+    padding: 16,
+    marginBottom: 20,
+    gap: 12,
+  },
+  webInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  webInfoTitle: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  webInfoText: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    lineHeight: 18,
+    letterSpacing: 0.3,
+  },
+  webInfoLink: {
+    color: theme.primary,
+    fontWeight: '700' as const,
+  },
+  qrScanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: theme.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  qrScanButtonText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: theme.background,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
   },
   statsContainer: {
     flexDirection: 'row',
