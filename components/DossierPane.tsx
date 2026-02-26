@@ -147,7 +147,6 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork }: D
 
   const autoSave = useCallback(() => {
     if (!dossierId) return;
-    if (!isEditing) return;
 
     const currentDossier = dossierRef.current;
     if (!currentDossier) return;
@@ -175,7 +174,7 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork }: D
           }
         : undefined,
     });
-  }, [dossierId, editCircle, editCompany, editEmails, editGoal, editImportance, editName, editPhones, editPhoto, editPowerGroupName, editRelations, editSectors, editPosition, editSuzerainId, editVassalIds, isEditing, updateDossier]);
+  }, [dossierId, editCircle, editCompany, editEmails, editGoal, editImportance, editName, editPhones, editPhoto, editPowerGroupName, editRelations, editSectors, editPosition, editSuzerainId, editVassalIds, updateDossier]);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -199,6 +198,26 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork }: D
       }
     };
   }, [autoSave, isEditing]);
+
+  useEffect(() => {
+    if (isEditing) return;
+    if (!dossierId || !dossierRef.current) return;
+    if (initializedForIdRef.current !== dossierId) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      autoSave();
+    }, 300);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [editRelations, editPowerGroupName, editSuzerainId, editVassalIds, isEditing, dossierId, autoSave]);
 
   const handleAddEntry = useCallback(() => {
     if (!dossier) return;
