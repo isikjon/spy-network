@@ -283,7 +283,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                     styles.subscriptionBadgeText,
                     subscriptionLevel === 'working' && styles.subscriptionBadgeTextActive,
                   ]}>
-                    {subscriptionLevel === 'working' ? t.profile.subscriptionWorking : t.profile.subscriptionBasic}
+                    {subscriptionLevel === 'working' ? (currentLanguage === 'ru' ? 'УРОВЕНЬ 2' : 'LEVEL 2') : (currentLanguage === 'ru' ? 'УРОВЕНЬ 1' : 'LEVEL 1')}
                   </Text>
                 </View>
               </View>
@@ -294,11 +294,10 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                   subscriptionLevel === 'basic' && styles.planCardActive,
                 ]}>
                   <View style={styles.planHeader}>
-                    <Lock size={18} color={subscriptionLevel === 'basic' ? theme.primary : theme.textSecondary} />
                     <Text style={[
                       styles.planName,
                       subscriptionLevel === 'basic' && styles.planNameActive,
-                    ]}>{t.profile.subscriptionBasic}</Text>
+                    ]}>{currentLanguage === 'ru' ? 'УРОВЕНЬ 1' : 'LEVEL 1'}</Text>
                     {subscriptionLevel === 'basic' && (
                       <View style={styles.currentPlanTag}>
                         <Text style={styles.currentPlanTagText}>{t.profile.subscriptionCurrentPlan}</Text>
@@ -315,11 +314,10 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                   subscriptionLevel === 'working' && styles.planCardActive,
                 ]}>
                   <View style={styles.planHeader}>
-                    <Crown size={18} color={subscriptionLevel === 'working' ? theme.warning : theme.textSecondary} />
                     <Text style={[
                       styles.planName,
                       subscriptionLevel === 'working' && styles.planNameActive,
-                    ]}>{t.profile.subscriptionWorking}</Text>
+                    ]}>{currentLanguage === 'ru' ? 'УРОВЕНЬ 2' : 'LEVEL 2'}</Text>
                     {subscriptionLevel === 'working' && (
                       <View style={styles.currentPlanTag}>
                         <Text style={styles.currentPlanTagText}>{t.profile.subscriptionActive}</Text>
@@ -338,7 +336,6 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                       onPress={() => changeSubscription('working')}
                       activeOpacity={0.7}
                     >
-                      <Crown size={16} color={theme.background} />
                       <Text style={styles.subscribeButtonText}>{t.profile.subscriptionActivate}</Text>
                     </TouchableOpacity>
                   ) : (
