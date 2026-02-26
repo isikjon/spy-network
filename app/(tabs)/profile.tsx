@@ -176,81 +176,97 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.profileCard}>
-            <View style={styles.avatar}>
-              <Shield size={48} color={theme.primary} strokeWidth={1.5} />
-            </View>
-            <Text style={styles.agentTitle}>{t.profile.agent}</Text>
-            <View style={styles.phoneContainer}>
-              <Phone size={16} color={theme.primaryDim} />
-              <Text style={styles.phoneText}>{phoneNumber}</Text>
-            </View>
-
-            {Platform.OS !== 'web' && (
-              <View style={styles.clearanceInline}>
-                <View style={styles.clearanceLevelRow}>
-                  <Text style={styles.clearanceLevelLabel}>{t.profile.clearanceLevel}</Text>
-                  <View style={[
-                    styles.clearanceLevelBadge,
-                    subscriptionLevel === 'working' && styles.clearanceLevelBadgeActive,
-                  ]}>
-                    <Text style={[
-                      styles.clearanceLevelValue,
-                      subscriptionLevel === 'working' && styles.clearanceLevelValueActive,
-                    ]}>
-                      {subscriptionLevel === 'working' ? t.profile.clearanceWorkingLevel : t.profile.clearanceBasicLevel}
-                    </Text>
-                  </View>
+          {Platform.OS === 'web' ? (
+            <View style={styles.profileCard}>
+              <View style={styles.webProfileRow}>
+                <View style={styles.avatar}>
+                  <Shield size={48} color={theme.primary} strokeWidth={1.5} />
                 </View>
-                <TouchableOpacity
-                  style={styles.upgradeClearanceButton}
-                  onPress={() => {
-                    const projectId = process.env.EXPO_PUBLIC_PROJECT_ID || '';
-                    const webUrl = `https://${projectId}.rork.app/`;
-                    Linking.openURL(webUrl).catch((err) => {
-                      console.log('[Profile] Failed to open web URL', err);
-                    });
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Crown size={18} color={theme.primary} />
-                  <Text style={styles.upgradeClearanceText}>{t.profile.upgradeClearance}</Text>
-                  <ChevronRight size={16} color={theme.primaryDim} style={{ marginLeft: 'auto' }} />
-                </TouchableOpacity>
+                <View style={styles.webProfileInfo}>
+                  <Text style={styles.webPhoneLast3}>{phoneNumber ? phoneNumber.slice(-3) : '---'}</Text>
+                  <Text style={styles.webClearanceLabel}>{t.profile.clearanceSection || 'ДОПУСК'}</Text>
+                  <Text style={styles.webClearanceLevel}>
+                    {t.profile.clearanceLevel} {subscriptionLevel === 'working' ? '2' : '1'}
+                  </Text>
+                </View>
               </View>
-            )}
-          </View>
+            </View>
+          ) : (
+            <>
+              <View style={styles.profileCard}>
+                <View style={styles.avatar}>
+                  <Shield size={48} color={theme.primary} strokeWidth={1.5} />
+                </View>
+                <View style={styles.phoneContainer}>
+                  <Phone size={16} color={theme.primaryDim} />
+                  <Text style={styles.phoneText}>{phoneNumber}</Text>
+                </View>
 
-          {Platform.OS !== 'web' && (
-            <TouchableOpacity
-              style={styles.linkWebButton}
-              onPress={() => router.push('/qr-scanner' as any)}
-              activeOpacity={0.7}
-            >
-              <QrCode size={20} color={theme.primary} />
-              <Text style={styles.linkWebText}>{t.profile.linkWeb || 'ПРИВЯЗАТЬ ВЕБ'}</Text>
-              <Monitor size={16} color={theme.primaryDim} style={{ marginLeft: 'auto' }} />
-            </TouchableOpacity>
+                <View style={styles.clearanceInline}>
+                  <View style={styles.clearanceLevelRow}>
+                    <Text style={styles.clearanceLevelLabel}>{t.profile.clearanceLevel}</Text>
+                    <View style={[
+                      styles.clearanceLevelBadge,
+                      subscriptionLevel === 'working' && styles.clearanceLevelBadgeActive,
+                    ]}>
+                      <Text style={[
+                        styles.clearanceLevelValue,
+                        subscriptionLevel === 'working' && styles.clearanceLevelValueActive,
+                      ]}>
+                        {subscriptionLevel === 'working' ? t.profile.clearanceWorkingLevel : t.profile.clearanceBasicLevel}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.upgradeClearanceButton}
+                    onPress={() => {
+                      const projectId = process.env.EXPO_PUBLIC_PROJECT_ID || '';
+                      const webUrl = `https://${projectId}.rork.app/`;
+                      Linking.openURL(webUrl).catch((err) => {
+                        console.log('[Profile] Failed to open web URL', err);
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Crown size={18} color={theme.primary} />
+                    <Text style={styles.upgradeClearanceText}>{t.profile.upgradeClearance}</Text>
+                    <ChevronRight size={16} color={theme.primaryDim} style={{ marginLeft: 'auto' }} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.linkWebButton}
+                onPress={() => router.push('/qr-scanner' as any)}
+                activeOpacity={0.7}
+              >
+                <QrCode size={20} color={theme.primary} />
+                <Text style={styles.linkWebText}>{t.profile.linkWeb || 'ПРИВЯЗАТЬ ВЕБ'}</Text>
+                <Monitor size={16} color={theme.primaryDim} style={{ marginLeft: 'auto' }} />
+              </TouchableOpacity>
+            </>
           )}
 
-          <View style={styles.statsContainer}>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{dossiers.length}</Text>
-              <Text style={styles.statLabel}>{t.profile.dossiers}</Text>
+          {Platform.OS !== 'web' && (
+            <View style={styles.statsContainer}>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{dossiers.length}</Text>
+                <Text style={styles.statLabel}>{t.profile.dossiers}</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>
+                  {dossiers.reduce((sum, d) => sum + d.relations.length, 0)}
+                </Text>
+                <Text style={styles.statLabel}>{t.profile.connections}</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>
+                  {dossiers.reduce((sum, d) => sum + d.diary.length, 0)}
+                </Text>
+                <Text style={styles.statLabel}>{t.profile.entries}</Text>
+              </View>
             </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>
-                {dossiers.reduce((sum, d) => sum + d.relations.length, 0)}
-              </Text>
-              <Text style={styles.statLabel}>{t.profile.connections}</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>
-                {dossiers.reduce((sum, d) => sum + d.diary.length, 0)}
-              </Text>
-              <Text style={styles.statLabel}>{t.profile.entries}</Text>
-            </View>
-          </View>
+          )}
 
           <View style={styles.themeContainer}>
             <View style={styles.themeHeader}>
@@ -283,45 +299,6 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
               >
                 <Text style={styles.languageButtonText}>{currentLanguage === 'ru' ? t.profile.russian : t.profile.english}</Text>
               </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.sectorsContainer}>
-            <View style={styles.sectorsHeader}>
-              <View style={styles.sectorsHeaderLeft}>
-                <Tag size={20} color={theme.primary} strokeWidth={1.5} />
-                <Text style={styles.sectorsTitle}>{t.profile.sectors}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowAddModal(true)}
-                activeOpacity={0.7}
-              >
-                <Plus size={18} color={theme.primary} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.sectorsList}>
-              {sectors.map((sector) => (
-                <View key={sector} style={styles.sectorItem}>
-                  <Text style={styles.sectorName}>{sector.toUpperCase()}</Text>
-                  <View style={styles.sectorActions}>
-                    <TouchableOpacity
-                      onPress={() => handleEditSector(sector)}
-                      activeOpacity={0.7}
-                      style={styles.sectorActionButton}
-                    >
-                      <Edit2 size={14} color={theme.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteSector(sector)}
-                      activeOpacity={0.7}
-                      style={styles.sectorActionButton}
-                    >
-                      <Trash2 size={14} color={theme.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
             </View>
           </View>
 
@@ -424,6 +401,45 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
               </View>
             </View>
           )}
+
+          <View style={styles.sectorsContainer}>
+            <View style={styles.sectorsHeader}>
+              <View style={styles.sectorsHeaderLeft}>
+                <Tag size={20} color={theme.primary} strokeWidth={1.5} />
+                <Text style={styles.sectorsTitle}>{t.profile.sectors}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setShowAddModal(true)}
+                activeOpacity={0.7}
+              >
+                <Plus size={18} color={theme.primary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.sectorsList}>
+              {sectors.map((sector) => (
+                <View key={sector} style={styles.sectorItem}>
+                  <Text style={styles.sectorName}>{sector.toUpperCase()}</Text>
+                  <View style={styles.sectorActions}>
+                    <TouchableOpacity
+                      onPress={() => handleEditSector(sector)}
+                      activeOpacity={0.7}
+                      style={styles.sectorActionButton}
+                    >
+                      <Edit2 size={14} color={theme.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteSector(sector)}
+                      activeOpacity={0.7}
+                      style={styles.sectorActionButton}
+                    >
+                      <Trash2 size={14} color={theme.danger} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
 
           <View style={styles.backupContainer}>
             <View style={styles.backupHeader}>
@@ -790,6 +806,37 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     color: theme.textSecondary,
     fontFamily: 'monospace' as const,
+  },
+  webProfileRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 20,
+  },
+  webProfileInfo: {
+    flex: 1,
+    alignItems: 'center' as const,
+  },
+  webPhoneLast3: {
+    fontSize: 48,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 4,
+  },
+  webClearanceLabel: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+    marginTop: 4,
+  },
+  webClearanceLevel: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
   },
   statsContainer: {
     flexDirection: 'row',
