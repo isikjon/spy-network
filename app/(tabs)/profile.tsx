@@ -1,6 +1,6 @@
 import { useApp } from '@/contexts/AppContext';
 import { Redirect, router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Crown, Lock, ChevronRight, QrCode, Monitor } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor } from 'lucide-react-native';
 
 import Tutorial from '@/components/Tutorial';
 import {
@@ -219,21 +219,6 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                       </Text>
                     </View>
                   </View>
-                  <TouchableOpacity
-                    style={styles.upgradeClearanceButton}
-                    onPress={() => {
-                      const projectId = process.env.EXPO_PUBLIC_PROJECT_ID || '';
-                      const webUrl = `https://${projectId}.rork.app/`;
-                      Linking.openURL(webUrl).catch((err) => {
-                        console.log('[Profile] Failed to open web URL', err);
-                      });
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Crown size={18} color={theme.primary} />
-                    <Text style={styles.upgradeClearanceText}>{t.profile.upgradeClearance}</Text>
-                    <ChevronRight size={16} color={theme.primaryDim} style={{ marginLeft: 'auto' }} />
-                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -1155,6 +1140,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     letterSpacing: 2,
   },
   subscriptionBadge: {
+    marginTop: 20,
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderWidth: 1,
@@ -1324,23 +1310,6 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   clearanceLevelValueActive: {
     color: theme.warning,
-  },
-  upgradeClearanceButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: theme.primary,
-    backgroundColor: theme.background,
-  },
-  upgradeClearanceText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: theme.primary,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 2,
   },
   backupContainer: {
     borderWidth: 2,

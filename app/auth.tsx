@@ -171,10 +171,15 @@ export default function AuthScreen() {
       } else {
         const resAny = res as any;
         setStep('error');
+        const detail = (resAny.detail || '').trim();
         if (resAny.error === 'INVALID_PHONE') {
           setErrorMsg('Неверный формат номера');
         } else if (resAny.error === 'SEND_FAILED') {
-          setErrorMsg(`Ошибка запроса${resAny.detail ? `: ${resAny.detail}` : ''}`);
+          if (/not enough permissions|недостаточно прав/i.test(detail)) {
+            setErrorMsg('Недостаточно прав доступа. Попробуйте позже или обратитесь в поддержку.');
+          } else {
+            setErrorMsg(detail ? `Ошибка запроса: ${detail}` : 'Ошибка запроса. Попробуйте позже.');
+          }
         } else {
           setErrorMsg(resAny.error || 'Неизвестная ошибка');
         }
