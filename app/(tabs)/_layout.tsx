@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
-import { Home, Search, User } from "lucide-react-native";
+import { Users, Share2, User } from "lucide-react-native";
 import React from "react";
-import { Platform, View } from "react-native";
+import { Platform, StyleSheet, Text } from "react-native";
 import { useApp } from "@/contexts/AppContext";
 
 export default function TabLayout() {
@@ -10,15 +10,21 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: theme.text || "#FFFFFF",
-        tabBarInactiveTintColor: theme.primaryDim || "#666666",
-        tabBarShowLabel: false,
+        tabBarActiveTintColor: theme.primary || "#00FF41",
+        tabBarInactiveTintColor: theme.primaryDim || "#004d18",
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontFamily: "monospace",
+          letterSpacing: 1,
+          marginTop: 2,
+        },
         tabBarStyle: {
           backgroundColor: theme.background,
-          borderTopColor: theme.border || "rgba(255,255,255,0.08)",
-          borderTopWidth: 0.5,
-          height: Platform.OS === "ios" ? 84 : 60,
-          paddingTop: 8,
+          borderTopColor: theme.border || "rgba(0,255,65,0.15)",
+          borderTopWidth: 1,
+          height: Platform.OS === "ios" ? 84 : 64,
+          paddingTop: 6,
           paddingBottom: Platform.OS === "ios" ? 28 : 8,
           elevation: 0,
           shadowOpacity: 0,
@@ -33,12 +39,12 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
+          tabBarLabel: "ДОСЬЕ",
           tabBarIcon: ({ focused, color }) => (
-            <Home
-              size={26}
+            <Users
+              size={24}
               color={color}
-              strokeWidth={focused ? 2.5 : 1.5}
-              fill={focused ? color : "transparent"}
+              strokeWidth={focused ? 2 : 1.5}
             />
           ),
         }}
@@ -46,11 +52,12 @@ export default function TabLayout() {
       <Tabs.Screen
         name="network"
         options={{
+          tabBarLabel: "СЕТЬ",
           tabBarIcon: ({ focused, color }) => (
-            <Search
-              size={26}
+            <Share2
+              size={24}
               color={color}
-              strokeWidth={focused ? 2.5 : 1.5}
+              strokeWidth={focused ? 2 : 1.5}
             />
           ),
         }}
@@ -58,25 +65,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
+          tabBarLabel: "ПРОФИЛЬ",
           tabBarIcon: ({ focused, color }) => (
-            <View
-              style={
-                focused
-                  ? {
-                      borderWidth: 2,
-                      borderColor: color,
-                      borderRadius: 50,
-                      padding: 1,
-                    }
-                  : undefined
-              }
-            >
-              <User
-                size={focused ? 22 : 26}
-                color={color}
-                strokeWidth={focused ? 2 : 1.5}
-              />
-            </View>
+            <User
+              size={24}
+              color={color}
+              strokeWidth={focused ? 2 : 1.5}
+            />
           ),
         }}
       />

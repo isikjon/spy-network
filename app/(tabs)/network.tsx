@@ -13,6 +13,7 @@ import {
   Dimensions,
   PanResponder,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle as SvgCircle, Line, Text as SvgText, G, Path, Polygon } from 'react-native-svg';
@@ -53,12 +54,38 @@ export default function NetworkScreen() {
   const lastDistance = useRef<number | null>(null);
   const isPinching = useRef(false);
   const isFullscreenRef = useRef<boolean>(false);
+  const mapContainerRef = useRef<any>(null);
 
   const styles = createStyles(theme);
 
   useEffect(() => {
     isFullscreenRef.current = isFullscreenMap;
   }, [isFullscreenMap]);
+
+  // Wheel zoom для веб-версии (mouse scroll)
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = mapContainerRef.current;
+    if (!el) return;
+    const node = el as unknown as HTMLElement;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const newScale = Math.min(Math.max(scaleRef.current * delta, 1), 4);
+      scaleRef.current = newScale;
+      animatedScale.setValue(newScale);
+      if (newScale <= 1) {
+        scaleRef.current = 1;
+        offsetXRef.current = 0;
+        offsetYRef.current = 0;
+        animatedScale.setValue(1);
+        animatedOffsetX.setValue(0);
+        animatedOffsetY.setValue(0);
+      }
+    };
+    node.addEventListener('wheel', handleWheel, { passive: false });
+    return () => node.removeEventListener('wheel', handleWheel);
+  }, [animatedScale, animatedOffsetX, animatedOffsetY]);
 
   const circles = ['support', 'productivity', 'development'];
 
@@ -451,6 +478,7 @@ export default function NetworkScreen() {
     (containerStyle: any, mapTestId: string) => {
       return (
         <View
+          ref={mapContainerRef}
           style={containerStyle}
           {...panResponder.panHandlers}
           testID={mapTestId}
