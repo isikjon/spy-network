@@ -12,8 +12,8 @@ export default function NotFoundScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>ERROR 404</Text>
         <Text style={styles.subtitle}>ACCESS DENIED</Text>
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>{'>'} RETURN TO BASE</Text>
+        <Link href="/app" style={styles.link}>
+          <Text style={styles.linkText}>{'>'} В ВЕБ-ВЕРСИЮ</Text>
         </Link>
       </View>
     </>

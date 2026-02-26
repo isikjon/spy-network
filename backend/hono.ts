@@ -115,44 +115,33 @@ app.get("/payment/success", (c) => {
 </html>`);
 });
 
-// Expo web app — JS/CSS бандлы и ассеты (Expo Router генерирует их по корневым путям)
+// Expo web app — JS/CSS бандлы и ассеты (по корню, не под /app)
 app.use("/_expo/*", serveStatic({ root: "dist" }));
 app.use("/assets/*", serveStatic({ root: "dist" }));
 app.get("/favicon.ico", serveStatic({ root: "dist", path: "/favicon.ico" }));
 
-// Expo web app — HTML страницы по /app/*
+// SPA: /app и /app/* (в т.ч. /app/auth) — всегда index.html, иначе был 404 на /app/auth
+const serveAppHtml = async (c: { html: (body: string) => Response; text: (body: string, status?: number) => Response }) => {
+  const fs = await import("node:fs/promises");
+  try {
+    const html = await fs.readFile("dist/index.html", "utf-8");
+    return c.html(html);
+  } catch {
+    return c.text("App not built. Run: npx expo export --platform web", 404);
+  }
+};
+app.get("/app", serveAppHtml);
+app.get("/app/*", serveAppHtml);
+
+// Статика приложения под /app (бандлы Expo под /app/_expo, /app/assets — если в dist так)
 app.use(
-  "/app/*",
-  serveStatic({
-    root: "dist",
-    rewriteRequestPath: (path) => {
-      const stripped = path.replace(/^\/app/, "");
-      return stripped === "" || stripped === "/" ? "/index.html" : stripped;
-    },
-  }),
+  "/app/_expo/*",
+  serveStatic({ root: "dist", rewriteRequestPath: (path) => path.replace(/^\/app/, "") }),
 );
-
-// Точный маршрут /app без слэша → отдаём index.html
-app.get("/app", async (c) => {
-  const fs = await import("node:fs/promises");
-  try {
-    const html = await fs.readFile("dist/index.html", "utf-8");
-    return c.html(html);
-  } catch {
-    return c.text("App not built. Run: npx expo export --platform web", 404);
-  }
-});
-
-// SPA fallback: любой /app/... маршрут отдаёт index.html (Expo Router обработает на клиенте)
-app.get("/app/*", async (c) => {
-  const fs = await import("node:fs/promises");
-  try {
-    const html = await fs.readFile("dist/index.html", "utf-8");
-    return c.html(html);
-  } catch {
-    return c.text("App not built. Run: npx expo export --platform web", 404);
-  }
-});
+app.use(
+  "/app/assets/*",
+  serveStatic({ root: "dist", rewriteRequestPath: (path) => path.replace(/^\/app/, "") }),
+);
 
 // Статика из web/: главная, страницы, форма админки (admin.html)
 app.use(
