@@ -1,6 +1,6 @@
 import { useApp } from '@/contexts/AppContext';
 import { Network as NetworkIcon, Circle } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -17,26 +17,90 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle as SvgCircle, Line, Text as SvgText, G, Path, Polygon } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { Sector, ContactDossier, FunctionalCircle } from '@/types';
 
 const { width, height } = Dimensions.get('window');
-const MAP_SIZE = Platform.OS === 'web'
-  ? Math.min(width * 0.45, height * 0.6)
-  : Math.min(width, height * 0.67);
+const MAP_SIZE = Math.min(width, height * 0.67);
 
-export default function NetworkScreen() {
+type OpenDossierHandler = (payload: { id: string; edit?: boolean }) => void;
+
+type NetworkScreenProps = {
+  onOpenDossier?: OpenDossierHandler;
+};
+
+type WebWheelBlockerProps = {
+  children: React.ReactNode;
+  style: any;
+  testID: string;
+  isActiveRef: React.MutableRefObject<boolean>;
+  onWheelZoom: (evt: any) => void;
+};
+
+function WebWheelBlocker({ children, style, testID, isActiveRef, onWheelZoom }: WebWheelBlockerProps) {
+  const hostRef = useRef<any>(null);
+  const onWheelZoomRef = useRef(onWheelZoom);
+
+  useEffect(() => {
+    onWheelZoomRef.current = onWheelZoom;
+  }, [onWheelZoom]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = hostRef.current;
+    if (!el || typeof el.addEventListener !== 'function') return;
+
+    const onWheelNative = (e: any) => {
+      if (!isActiveRef.current) return;
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+      onWheelZoomRef.current?.({
+        nativeEvent: e,
+        preventDefault: () => e.preventDefault(),
+        stopPropagation: () => e.stopPropagation(),
+      });
+    };
+
+    try {
+      el.addEventListener('wheel', onWheelNative, { passive: false });
+    } catch (err) {
+      console.warn('[NetworkMap] failed to attach native wheel listener', err);
+    }
+
+    return () => {
+      try {
+        el.removeEventListener('wheel', onWheelNative);
+      } catch (err) {
+        console.warn('[NetworkMap] failed to remove native wheel listener', err);
+      }
+    };
+  }, [isActiveRef]);
+
+  return (
+    <View
+      ref={(r: any) => {
+        hostRef.current = r;
+      }}
+      style={style}
+      testID={testID}
+    >
+      {children}
+    </View>
+  );
+}
+
+export default function NetworkScreen({ onOpenDossier }: NetworkScreenProps) {
   const { dossiers, sectors, theme, powerGroupings, t, currentTheme } = useApp();
   const router = useRouter();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
+
+  const shouldRedirectToSplitView = Platform.OS === 'web' && !onOpenDossier;
   const [filterSectors, setFilterSectors] = useState<Sector[]>([]);
   const [filterCircle, setFilterCircle] = useState<string | null>(null);
   const [filterPowerGroupings, setFilterPowerGroupings] = useState<string[]>([]);
 
   const [isFullscreenMap, setIsFullscreenMap] = useState<boolean>(false);
   const [scale, setScale] = useState<number>(1);
-  const [offsetX, setOffsetX] = useState<number>(0);
-  const [offsetY, setOffsetY] = useState<number>(0);
 
   const animatedScale = useRef<Animated.Value>(new Animated.Value(1)).current;
   const animatedOffsetX = useRef<Animated.Value>(new Animated.Value(0)).current;
@@ -44,11 +108,9 @@ export default function NetworkScreen() {
 
   const panStartOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  const webMapSize = Platform.OS === 'web' ? Math.min(winWidth * 0.45, winHeight * 0.55) : MAP_SIZE;
-  const effectiveMapSize = Platform.OS === 'web' ? webMapSize : MAP_SIZE;
-  const mapBaseSize = isFullscreenMap ? Math.min(winWidth, winHeight) : effectiveMapSize;
-  const canvasWidth = isFullscreenMap ? winWidth : effectiveMapSize;
-  const canvasHeight = isFullscreenMap ? winHeight : effectiveMapSize;
+  const mapBaseSize = isFullscreenMap ? Math.min(winWidth, winHeight) : MAP_SIZE;
+  const canvasWidth = isFullscreenMap ? winWidth : MAP_SIZE;
+  const canvasHeight = isFullscreenMap ? winHeight : MAP_SIZE;
   const centerX = canvasWidth / 2;
   const centerY = canvasHeight / 2;
 
@@ -58,38 +120,12 @@ export default function NetworkScreen() {
   const lastDistance = useRef<number | null>(null);
   const isPinching = useRef(false);
   const isFullscreenRef = useRef<boolean>(false);
-  const mapContainerRef = useRef<any>(null);
 
   const styles = createStyles(theme);
 
   useEffect(() => {
     isFullscreenRef.current = isFullscreenMap;
   }, [isFullscreenMap]);
-
-  // Wheel zoom для веб-версии (mouse scroll)
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const el = mapContainerRef.current;
-    if (!el) return;
-    const node = el as unknown as HTMLElement;
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newScale = Math.min(Math.max(scaleRef.current * delta, 1), 4);
-      scaleRef.current = newScale;
-      animatedScale.setValue(newScale);
-      if (newScale <= 1) {
-        scaleRef.current = 1;
-        offsetXRef.current = 0;
-        offsetYRef.current = 0;
-        animatedScale.setValue(1);
-        animatedOffsetX.setValue(0);
-        animatedOffsetY.setValue(0);
-      }
-    };
-    node.addEventListener('wheel', handleWheel, { passive: false });
-    return () => node.removeEventListener('wheel', handleWheel);
-  }, [animatedScale, animatedOffsetX, animatedOffsetY]);
 
   const circles = ['support', 'productivity', 'development'];
 
@@ -360,9 +396,9 @@ export default function NetworkScreen() {
     isPinching.current = false;
     isFullscreenRef.current = false;
     setScale(1);
-    setOffsetX(0);
-    setOffsetY(0);
-    setIsFullscreenMap(false);
+    if (Platform.OS !== 'web') {
+      setIsFullscreenMap(false);
+    }
     animateTransformTo({ scale: 1, x: 0, y: 0 });
   }, [animateTransformTo, panStartOffset]);
 
@@ -391,7 +427,7 @@ export default function NetworkScreen() {
             animateTransformTo({ scale: newScale });
 
             const shouldFullscreen = newScale > 1.2;
-            if (shouldFullscreen !== isFullscreenRef.current) {
+            if (Platform.OS !== 'web' && shouldFullscreen !== isFullscreenRef.current) {
               console.log('[NetworkMap] fullscreen toggle via scale', {
                 newScale,
                 shouldFullscreen,
@@ -410,8 +446,6 @@ export default function NetworkScreen() {
               offsetXRef.current = 0;
               offsetYRef.current = 0;
               panStartOffset.current = { x: 0, y: 0 };
-              setOffsetX(0);
-              setOffsetY(0);
               animateTransformTo({ x: 0, y: 0 });
             }
           }
@@ -427,8 +461,6 @@ export default function NetworkScreen() {
 
           offsetXRef.current = clampedX;
           offsetYRef.current = clampedY;
-          setOffsetX(clampedX);
-          setOffsetY(clampedY);
           animateTransformTo({ x: clampedX, y: clampedY }, { immediate: true });
         }
       },
@@ -450,8 +482,6 @@ export default function NetworkScreen() {
           offsetYRef.current = 0;
           panStartOffset.current = { x: 0, y: 0 };
           setScale(1);
-          setOffsetX(0);
-          setOffsetY(0);
           animateTransformTo({ scale: 1, x: 0, y: 0 });
           return;
         }
@@ -463,8 +493,6 @@ export default function NetworkScreen() {
         if (clampedX !== offsetXRef.current || clampedY !== offsetYRef.current) {
           offsetXRef.current = clampedX;
           offsetYRef.current = clampedY;
-          setOffsetX(clampedX);
-          setOffsetY(clampedY);
           animateTransformTo({ x: clampedX, y: clampedY });
         }
       },
@@ -473,20 +501,179 @@ export default function NetworkScreen() {
 
   const handleContactPress = useCallback(
     (contactId: string) => {
-      router.push(`/dossier/${contactId}`);
+      if (onOpenDossier) {
+        console.log('[NetworkMap] open dossier via callback', { contactId });
+        onOpenDossier({ id: contactId });
+        return;
+      }
+      router.push(`/dossier/${contactId}` as any);
     },
-    [router],
+    [onOpenDossier, router],
   );
+
+  const isPointerOverMapRef = useRef<boolean>(false);
+
+  const handleWheel = useCallback(
+    (evt: any) => {
+      if (Platform.OS !== 'web') return;
+      if (!isPointerOverMapRef.current) return;
+
+      const deltaY: number =
+        typeof evt?.nativeEvent?.deltaY === 'number'
+          ? evt.nativeEvent.deltaY
+          : typeof evt?.deltaY === 'number'
+            ? evt.deltaY
+            : 0;
+
+      if (deltaY === 0) return;
+
+      if (typeof evt?.preventDefault === 'function') {
+        evt.preventDefault();
+      }
+      if (typeof evt?.stopPropagation === 'function') {
+        evt.stopPropagation();
+      }
+
+      const zoomFactor = Math.exp(-deltaY * 0.0012);
+      const nextScale = Math.min(Math.max(scaleRef.current * zoomFactor, 1), 3);
+
+      if (Math.abs(nextScale - scaleRef.current) < 0.001) return;
+
+      console.log('[NetworkMap] wheel zoom', { deltaY, from: scaleRef.current, to: nextScale });
+
+      scaleRef.current = nextScale;
+      setScale(nextScale);
+      animateTransformTo({ scale: nextScale }, { immediate: true });
+
+      const shouldFullscreen = nextScale > 1.2;
+      if (Platform.OS !== 'web' && shouldFullscreen !== isFullscreenRef.current) {
+        isFullscreenRef.current = shouldFullscreen;
+        setIsFullscreenMap(shouldFullscreen);
+      }
+
+      if (isFullscreenRef.current && nextScale <= 1.05) {
+        resetMapTransform();
+      }
+
+      if (!shouldFullscreen && nextScale <= 1.02) {
+        offsetXRef.current = 0;
+        offsetYRef.current = 0;
+        panStartOffset.current = { x: 0, y: 0 };
+        animateTransformTo({ x: 0, y: 0 }, { immediate: true });
+      }
+    },
+    [animateTransformTo, resetMapTransform],
+  );
+
+  const WheelView = View as unknown as React.ComponentType<any>;
+
+  const WheelScrollView = ScrollView as unknown as React.ComponentType<any>;
+
+  const WheelHorizontalScroll = (props: {
+    children: React.ReactNode;
+    contentContainerStyle: any;
+    testID: string;
+  }) => {
+    const { children, contentContainerStyle, testID } = props;
+    const scrollRef = useRef<ScrollView | null>(null);
+    const lastXRef = useRef<number>(0);
+    const isHoverRef = useRef<boolean>(false);
+
+    const handleWheelHorizontal = useCallback((evt: any) => {
+      if (Platform.OS !== 'web') return;
+      if (!isHoverRef.current) return;
+
+      const deltaY: number =
+        typeof evt?.nativeEvent?.deltaY === 'number'
+          ? evt.nativeEvent.deltaY
+          : typeof evt?.deltaY === 'number'
+            ? evt.deltaY
+            : 0;
+
+      if (deltaY === 0) return;
+
+      if (typeof evt?.preventDefault === 'function') {
+        evt.preventDefault();
+      }
+      if (typeof evt?.stopPropagation === 'function') {
+        evt.stopPropagation();
+      }
+
+      const nextX = Math.max(0, lastXRef.current + deltaY);
+      lastXRef.current = nextX;
+      scrollRef.current?.scrollTo({ x: nextX, y: 0, animated: false });
+    }, []);
+
+    return (
+      <WheelScrollView
+        ref={(r: ScrollView | null) => {
+          scrollRef.current = r;
+        }}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={contentContainerStyle}
+        onScroll={(e: any) => {
+          const x =
+            typeof e?.nativeEvent?.contentOffset?.x === 'number'
+              ? e.nativeEvent.contentOffset.x
+              : 0;
+          lastXRef.current = x;
+        }}
+        scrollEventThrottle={16}
+        onMouseEnter={
+          Platform.OS === 'web'
+            ? () => {
+                isHoverRef.current = true;
+              }
+            : undefined
+        }
+        onMouseLeave={
+          Platform.OS === 'web'
+            ? () => {
+                isHoverRef.current = false;
+              }
+            : undefined
+        }
+        onWheel={Platform.OS === 'web' ? handleWheelHorizontal : undefined}
+        onWheelCapture={Platform.OS === 'web' ? handleWheelHorizontal : undefined}
+        testID={testID}
+      >
+        {children}
+      </WheelScrollView>
+    );
+  };
 
   const renderMap = useCallback(
     (containerStyle: any, mapTestId: string) => {
       return (
-        <View
-          ref={mapContainerRef}
+        <WebWheelBlocker
           style={containerStyle}
-          {...panResponder.panHandlers}
           testID={mapTestId}
+          isActiveRef={isPointerOverMapRef}
+          onWheelZoom={handleWheel}
         >
+          <WheelView
+            style={StyleSheet.absoluteFill}
+            {...panResponder.panHandlers}
+            onMouseEnter={
+              Platform.OS === 'web'
+                ? () => {
+                    console.log('[NetworkMap] pointer enter');
+                    isPointerOverMapRef.current = true;
+                  }
+                : undefined
+            }
+            onMouseLeave={
+              Platform.OS === 'web'
+                ? () => {
+                    console.log('[NetworkMap] pointer leave');
+                    isPointerOverMapRef.current = false;
+                  }
+                : undefined
+            }
+            onWheel={Platform.OS === 'web' ? handleWheel : undefined}
+            onWheelCapture={Platform.OS === 'web' ? handleWheel : undefined}
+          >
           <Animated.View
             style={{
               transform: [
@@ -579,17 +766,6 @@ export default function NetworkScreen() {
                   const midAngle = (startAngle + endAngle) / 2;
                   const labelRadius = maxRadius * 1.1;
 
-                  const sectorColors = [
-                    theme.primary,
-                    theme.warning,
-                    theme.danger,
-                    '#4A90E2',
-                    '#50C878',
-                    '#FF6B9D',
-                    '#FFD700',
-                    '#9370DB',
-                  ];
-                  const sectorColor = sectorColors[idx % sectorColors.length];
 
                   return (
                     <G key={`sector-${sector}`}>
@@ -635,8 +811,8 @@ export default function NetworkScreen() {
                   x2={conn.to.x}
                   y2={conn.to.y}
                   stroke={theme.primary}
-                  strokeWidth={Math.max(0.5, Math.min(conn.strength, 10) / 2) / scale}
-                  opacity={Math.min(0.6, Math.min(conn.strength, 10) / 10)}
+                  strokeWidth={Math.max(0.5, conn.strength / 2) / scale}
+                  opacity={Math.min(0.6, conn.strength / 10)}
                 />
               ))}
 
@@ -768,10 +944,17 @@ export default function NetworkScreen() {
               );
             })}
           </Animated.View>
-        </View>
+          </WheelView>
+        </WebWheelBlocker>
       );
     },
     [
+      WheelView,
+      animatedOffsetX,
+      animatedOffsetY,
+      animatedScale,
+      canvasHeight,
+      canvasWidth,
       centerX,
       centerY,
       connections,
@@ -779,11 +962,8 @@ export default function NetworkScreen() {
       filterCircle,
       filteredDossiers,
       handleContactPress,
+      handleWheel,
       mapBaseSize,
-      canvasHeight,
-      canvasWidth,
-      offsetX,
-      offsetY,
       panResponder.panHandlers,
       positions,
       powerConnections,
@@ -796,6 +976,11 @@ export default function NetworkScreen() {
     ],
   );
 
+  if (shouldRedirectToSplitView) {
+    console.log('[NetworkScreen] web standalone route opened; redirecting to split view');
+    return <Redirect href="/" />;
+  }
+
   return (
     <View style={styles.background}>
       <StatusBar barStyle="light-content" />
@@ -807,11 +992,7 @@ export default function NetworkScreen() {
 
         <View>
           <Text style={styles.filterLabel}>{t.network.sector}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
-          >
+          <WheelHorizontalScroll contentContainerStyle={styles.filters} testID="network-filter-sectors-scroll">
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -859,14 +1040,10 @@ export default function NetworkScreen() {
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </WheelHorizontalScroll>
 
           <Text style={styles.filterLabel}>{t.network.functionalCircle}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
-          >
+          <WheelHorizontalScroll contentContainerStyle={styles.filters} testID="network-filter-circles-scroll">
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -907,14 +1084,10 @@ export default function NetworkScreen() {
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </WheelHorizontalScroll>
 
           <Text style={styles.filterLabel}>{t.network.powerGrouping}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
-          >
+          <WheelHorizontalScroll contentContainerStyle={styles.filters} testID="network-filter-powergroups-scroll">
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -961,7 +1134,7 @@ export default function NetworkScreen() {
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </WheelHorizontalScroll>
         </View>
 
         {dossiers.length === 0 ? (
@@ -979,12 +1152,7 @@ export default function NetworkScreen() {
             scrollEnabled={!isFullscreenMap}
           >
             {!isFullscreenMap ? (
-              renderMap(
-                Platform.OS === 'web'
-                  ? [styles.visualization, { width: canvasWidth, height: canvasHeight }]
-                  : styles.visualization,
-                'network-map'
-              )
+              renderMap(styles.visualization, 'network-map')
             ) : (
               <View
                 style={[styles.visualizationPlaceholder, { height: MAP_SIZE }]}

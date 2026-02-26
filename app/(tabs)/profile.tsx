@@ -1,7 +1,7 @@
 import { useApp } from '@/contexts/AppContext';
-import { trpc } from '@/lib/trpc';
-import { router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, Crown, AlertTriangle, CreditCard, QrCode, Monitor } from 'lucide-react-native';
+import { Redirect, router } from 'expo-router';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Crown, Lock, ChevronRight, QrCode, Monitor } from 'lucide-react-native';
+
 import Tutorial from '@/components/Tutorial';
 import {
   StyleSheet,
@@ -13,15 +13,18 @@ import {
   ScrollView,
   TextInput,
   Modal,
-  Linking,
   Platform,
-  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 
-export default function ProfileScreen() {
-  const { phoneNumber, logout, dossiers, sectors, addSector, removeSector, updateSector, theme, currentTheme, switchTheme, t, currentLanguage, switchLanguage, resetTutorial, createBackup, restoreBackup } = useApp();
+type ProfileScreenProps = {
+  embedded?: boolean;
+};
+
+export default function ProfileScreen({ embedded }: ProfileScreenProps) {
+  const { phoneNumber, logout, dossiers, sectors, addSector, removeSector, updateSector, theme, currentTheme, switchTheme, t, currentLanguage, switchLanguage, resetTutorial, createBackup, restoreBackup, subscriptionLevel, changeSubscription } = useApp();
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -30,65 +33,18 @@ export default function ProfileScreen() {
   const [editedSectorName, setEditedSectorName] = useState('');
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
-  const [paymentLoading, setPaymentLoading] = useState(false);
 
-  // Запрос уровня пользователя
-  const levelQuery = trpc.appData.getMyLevel.useQuery(undefined, {
-    enabled: !!phoneNumber,
-    staleTime: 30_000,
-  });
+  const shouldRedirectToSplitView = Platform.OS === 'web' && !embedded;
 
-  const userLevel = levelQuery.data?.ok ? levelQuery.data.level : 1;
-  const maxContacts = levelQuery.data?.ok ? levelQuery.data.maxContacts : 20;
-  const currentContacts = dossiers.length;
-  const showAds = levelQuery.data?.ok ? levelQuery.data.showAds : true;
-  const subscribedUntil = levelQuery.data?.ok ? levelQuery.data.subscribedUntil : null;
-  const isAtLimit = maxContacts !== null && currentContacts >= maxContacts;
+  if (shouldRedirectToSplitView) {
+    console.log('[ProfileScreen] web standalone route opened; redirecting to split view');
+    return <Redirect href="/" />;
+  }
 
   const styles = createStyles(theme);
-  const createPaymentMutation = trpc.payment.createPayment.useMutation();
-
-  const handleGetAccess = async () => {
-    // На вебе — запускаем оплату напрямую
-    if (Platform.OS === 'web') {
-      setPaymentLoading(true);
-      try {
-        const res = await createPaymentMutation.mutateAsync();
-        if (res.ok && res.paymentUrl) {
-          // Открываем страницу оплаты YooKassa в новой вкладке
-          window.open(res.paymentUrl, '_blank');
-        } else {
-          const errCode = (res as any).error;
-          const msg = errCode === 'NOT_CONFIGURED'
-            ? 'Оплата временно недоступна. Обратитесь в поддержку.'
-            : `Ошибка создания платежа: ${errCode || 'неизвестно'}`;
-          Alert.alert('ОШИБКА', msg, [{ text: 'OK' }]);
-        }
-      } catch (e: any) {
-        Alert.alert('ОШИБКА', e?.message || 'Ошибка сети', [{ text: 'OK' }]);
-      } finally {
-        setPaymentLoading(false);
-      }
-      return;
-    }
-
-    // На мобиле — информируем, что оплата в веб-версии
-    Alert.alert(
-      currentLanguage === 'ru' ? 'ПОЛУЧИТЬ ДОПУСК' : 'GET ACCESS',
-      currentLanguage === 'ru'
-        ? 'Уровень 2 снимает лимит контактов и убирает рекламу. Подписка 99 руб./неделя. Оформить можно в веб-версии spynetwork.ru'
-        : 'Level 2 removes the contact limit and ads. Subscription 99 RUB/week. Available at spynetwork.ru',
-      [
-        { text: 'OK', style: 'default' },
-        {
-          text: currentLanguage === 'ru' ? 'ОТКРЫТЬ' : 'OPEN',
-          onPress: () => Linking.openURL('https://spynetwork.ru'),
-        },
-      ]
-    );
-  };
 
   const handleLogout = () => {
+
     Alert.alert(
       t.profile.terminateSessionTitle,
       t.profile.terminateSessionMessage,
@@ -102,7 +58,7 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: () => {
             logout();
-            router.replace('/auth');
+            router.replace('/auth' as any);
           },
         },
       ],
@@ -224,58 +180,57 @@ export default function ProfileScreen() {
             <View style={styles.avatar}>
               <Shield size={48} color={theme.primary} strokeWidth={1.5} />
             </View>
+            <Text style={styles.agentTitle}>{t.profile.agent}</Text>
             <View style={styles.phoneContainer}>
               <Phone size={16} color={theme.primaryDim} />
               <Text style={styles.phoneText}>{phoneNumber}</Text>
             </View>
+
+            {Platform.OS !== 'web' && (
+              <View style={styles.clearanceInline}>
+                <View style={styles.clearanceLevelRow}>
+                  <Text style={styles.clearanceLevelLabel}>{t.profile.clearanceLevel}</Text>
+                  <View style={[
+                    styles.clearanceLevelBadge,
+                    subscriptionLevel === 'working' && styles.clearanceLevelBadgeActive,
+                  ]}>
+                    <Text style={[
+                      styles.clearanceLevelValue,
+                      subscriptionLevel === 'working' && styles.clearanceLevelValueActive,
+                    ]}>
+                      {subscriptionLevel === 'working' ? t.profile.clearanceWorkingLevel : t.profile.clearanceBasicLevel}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.upgradeClearanceButton}
+                  onPress={() => {
+                    const projectId = process.env.EXPO_PUBLIC_PROJECT_ID || '';
+                    const webUrl = `https://${projectId}.rork.app/`;
+                    Linking.openURL(webUrl).catch((err) => {
+                      console.log('[Profile] Failed to open web URL', err);
+                    });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Crown size={18} color={theme.primary} />
+                  <Text style={styles.upgradeClearanceText}>{t.profile.upgradeClearance}</Text>
+                  <ChevronRight size={16} color={theme.primaryDim} style={{ marginLeft: 'auto' }} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
-          {/* На вебе — блок подписки, на мобиле — QR-блок */}
-          {Platform.OS === 'web' ? (
-            userLevel < 2 && (
-              <TouchableOpacity
-                style={[styles.accessButton, paymentLoading && { opacity: 0.6 }]}
-                onPress={handleGetAccess}
-                activeOpacity={0.7}
-                disabled={paymentLoading}
-              >
-                {paymentLoading ? (
-                  <ActivityIndicator color={theme.primary} size="small" />
-                ) : (
-                  <CreditCard size={20} color={theme.primary} strokeWidth={1.5} />
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.accessButtonTitle}>
-                    {currentLanguage === 'ru' ? 'ПОВЫСИТЬ ДОПУСК' : 'UPGRADE ACCESS'}
-                  </Text>
-                  <Text style={styles.accessButtonSubtitle}>
-                    {currentLanguage === 'ru'
-                      ? 'Оплатить онлайн — 99 руб./нед. • Безлимит контактов'
-                      : 'Pay online — 99 RUB/week • Unlimited contacts'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            )
-          ) : (
-            <View style={styles.webInfoBlock}>
-              <View style={styles.webInfoHeader}>
-                <Monitor size={18} color={theme.primary} strokeWidth={1.5} />
-                <Text style={styles.webInfoTitle}>ВЕБ-ВЕРСИЯ</Text>
-              </View>
-              <Text style={styles.webInfoText}>
-                Для запуска программы на компьютере войдите на сайт{' '}
-                <Text style={styles.webInfoLink}>www.spynetwork.ru</Text>{' '}
-                и авторизуйтесь в системе, отсканировав QR код. В Web версии доступно расширенное управление профилем.
-              </Text>
-              <TouchableOpacity
-                style={styles.qrScanButton}
-                onPress={() => router.push('/qr-scanner')}
-                activeOpacity={0.7}
-              >
-                <QrCode size={20} color={theme.background} strokeWidth={2} />
-                <Text style={styles.qrScanButtonText}>СКАНИРОВАТЬ QR КОД</Text>
-              </TouchableOpacity>
-            </View>
+          {Platform.OS !== 'web' && (
+            <TouchableOpacity
+              style={styles.linkWebButton}
+              onPress={() => router.push('/qr-scanner' as any)}
+              activeOpacity={0.7}
+            >
+              <QrCode size={20} color={theme.primary} />
+              <Text style={styles.linkWebText}>{t.profile.linkWeb || 'ПРИВЯЗАТЬ ВЕБ'}</Text>
+              <Monitor size={16} color={theme.primaryDim} style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
           )}
 
           <View style={styles.statsContainer}>
@@ -296,77 +251,6 @@ export default function ProfileScreen() {
               <Text style={styles.statLabel}>{t.profile.entries}</Text>
             </View>
           </View>
-
-          <View style={styles.infoSection}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>{t.profile.status}</Text>
-              <Text style={styles.infoValue}>{t.profile.statusValue}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'ДОПУСК' : 'CLEARANCE'}</Text>
-              <Text style={[styles.infoValue, userLevel >= 2 && { color: theme.primary }]}>
-                {currentLanguage === 'ru'
-                  ? (userLevel >= 2 ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1')
-                  : (userLevel >= 2 ? 'LEVEL 2' : 'LEVEL 1')}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'КОНТАКТЫ' : 'CONTACTS'}</Text>
-              <Text style={[styles.infoValue, isAtLimit && { color: theme.danger }]}>
-                {maxContacts !== null
-                  ? `${currentContacts} / ${maxContacts}`
-                  : `${currentContacts} / ∞`}
-              </Text>
-            </View>
-            {subscribedUntil && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{currentLanguage === 'ru' ? 'ПОДПИСКА ДО' : 'SUBSCRIBED UNTIL'}</Text>
-                <Text style={styles.infoValue}>
-                  {new Date(subscribedUntil).toLocaleDateString(currentLanguage === 'ru' ? 'ru-RU' : 'en-US')}
-                </Text>
-              </View>
-            )}
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>{t.profile.encryption}</Text>
-              <Text style={styles.infoValue}>{t.profile.encryptionValue}</Text>
-            </View>
-          </View>
-
-          {userLevel < 2 && Platform.OS !== 'web' && (
-            <TouchableOpacity
-              style={[styles.accessButton, paymentLoading && { opacity: 0.6 }]}
-              onPress={handleGetAccess}
-              activeOpacity={0.7}
-              disabled={paymentLoading}
-            >
-              {paymentLoading ? (
-                <ActivityIndicator color={theme.primary} size="small" />
-              ) : (
-                <CreditCard size={20} color={theme.primary} strokeWidth={1.5} />
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.accessButtonTitle}>
-                  {currentLanguage === 'ru' ? 'ПОВЫСИТЬ ДОПУСК' : 'UPGRADE ACCESS'}
-                </Text>
-                <Text style={styles.accessButtonSubtitle}>
-                  {currentLanguage === 'ru'
-                    ? 'Повысьте допуск в веб-версии системы'
-                    : 'Upgrade your access in the web version'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {isAtLimit && (
-            <View style={styles.limitWarning}>
-              <AlertTriangle size={16} color={theme.danger} strokeWidth={1.5} />
-              <Text style={styles.limitWarningText}>
-                {currentLanguage === 'ru'
-                  ? `Лимит контактов достигнут (${maxContacts}). Получите ДОПУСК уровня 2 для снятия ограничения.`
-                  : `Contact limit reached (${maxContacts}). Get Level 2 ACCESS to remove the limit.`}
-              </Text>
-            </View>
-          )}
 
           <View style={styles.themeContainer}>
             <View style={styles.themeHeader}>
@@ -440,6 +324,106 @@ export default function ProfileScreen() {
               ))}
             </View>
           </View>
+
+          {Platform.OS === 'web' && (
+            <View style={styles.subscriptionContainer}>
+              <View style={styles.subscriptionHeader}>
+                <View style={styles.subscriptionHeaderLeft}>
+                  <CreditCard size={20} color={theme.primary} strokeWidth={1.5} />
+                  <Text style={styles.subscriptionTitle}>{t.profile.subscription}</Text>
+                </View>
+                <View style={[
+                  styles.subscriptionBadge,
+                  subscriptionLevel === 'working' && styles.subscriptionBadgeActive,
+                ]}>
+                  <Text style={[
+                    styles.subscriptionBadgeText,
+                    subscriptionLevel === 'working' && styles.subscriptionBadgeTextActive,
+                  ]}>
+                    {subscriptionLevel === 'working' ? t.profile.subscriptionWorking : t.profile.subscriptionBasic}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.subscriptionPlans}>
+                <View style={[
+                  styles.planCard,
+                  subscriptionLevel === 'basic' && styles.planCardActive,
+                ]}>
+                  <View style={styles.planHeader}>
+                    <Lock size={18} color={subscriptionLevel === 'basic' ? theme.primary : theme.textSecondary} />
+                    <Text style={[
+                      styles.planName,
+                      subscriptionLevel === 'basic' && styles.planNameActive,
+                    ]}>{t.profile.subscriptionBasic}</Text>
+                    {subscriptionLevel === 'basic' && (
+                      <View style={styles.currentPlanTag}>
+                        <Text style={styles.currentPlanTagText}>{t.profile.subscriptionCurrentPlan}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.planDesc}>{t.profile.subscriptionBasicDesc}</Text>
+                  <Text style={styles.planPrice}>0 \u20bd</Text>
+                </View>
+
+                <View style={[
+                  styles.planCard,
+                  styles.planCardPremium,
+                  subscriptionLevel === 'working' && styles.planCardActive,
+                ]}>
+                  <View style={styles.planHeader}>
+                    <Crown size={18} color={subscriptionLevel === 'working' ? theme.warning : theme.textSecondary} />
+                    <Text style={[
+                      styles.planName,
+                      subscriptionLevel === 'working' && styles.planNameActive,
+                    ]}>{t.profile.subscriptionWorking}</Text>
+                    {subscriptionLevel === 'working' && (
+                      <View style={styles.currentPlanTag}>
+                        <Text style={styles.currentPlanTagText}>{t.profile.subscriptionActive}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.planDesc}>{t.profile.subscriptionWorkingDesc}</Text>
+                  <View style={styles.planPriceRow}>
+                    <Text style={styles.planPricePremium}>{t.profile.subscriptionPrice}</Text>
+                    <Text style={styles.planAutoRenew}>{t.profile.subscriptionAutoRenew}</Text>
+                  </View>
+
+                  {subscriptionLevel === 'basic' ? (
+                    <TouchableOpacity
+                      style={styles.subscribeButton}
+                      onPress={() => changeSubscription('working')}
+                      activeOpacity={0.7}
+                    >
+                      <Crown size={16} color={theme.background} />
+                      <Text style={styles.subscribeButtonText}>{t.profile.subscriptionActivate}</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.cancelSubscriptionButton}
+                      onPress={() => {
+                        Alert.alert(
+                          t.profile.subscriptionCancelConfirmTitle,
+                          t.profile.subscriptionCancelConfirmMessage,
+                          [
+                            { text: t.profile.cancel, style: 'cancel' },
+                            {
+                              text: t.profile.subscriptionConfirm,
+                              style: 'destructive',
+                              onPress: () => changeSubscription('basic'),
+                            },
+                          ]
+                        );
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.cancelSubscriptionText}>{t.profile.subscriptionCancel}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </View>
+          )}
 
           <View style={styles.backupContainer}>
             <View style={styles.backupHeader}>
@@ -807,53 +791,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.textSecondary,
     fontFamily: 'monospace' as const,
   },
-  webInfoBlock: {
-    borderWidth: 2,
-    borderColor: theme.primary,
-    backgroundColor: theme.overlay,
-    padding: 16,
-    marginBottom: 20,
-    gap: 12,
-  },
-  webInfoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  webInfoTitle: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: theme.primary,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 2,
-  },
-  webInfoText: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    fontFamily: 'monospace' as const,
-    lineHeight: 18,
-    letterSpacing: 0.3,
-  },
-  webInfoLink: {
-    color: theme.primary,
-    fontWeight: '700' as const,
-  },
-  qrScanButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: theme.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-  },
-  qrScanButtonText: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: theme.background,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 2,
-  },
   statsContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -880,76 +817,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     letterSpacing: 1,
     marginTop: 4,
   },
-  infoSection: {
-    borderWidth: 2,
-    borderColor: theme.border,
-    backgroundColor: theme.overlay,
-    padding: 20,
-    marginBottom: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 1,
-  },
-  infoValue: {
-    fontSize: 12,
-    color: theme.text,
-    fontFamily: 'monospace' as const,
-    fontWeight: '700' as const,
-    letterSpacing: 1,
-  },
-  accessButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: theme.primary,
-    backgroundColor: theme.overlay,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    gap: 16,
-    marginBottom: 20,
-  },
-  accessButtonTitle: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    color: theme.primary,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 2,
-  },
-  accessButtonSubtitle: {
-    fontSize: 11,
-    color: theme.textSecondary,
-    fontFamily: 'monospace' as const,
-    marginTop: 4,
-    letterSpacing: 0.5,
-  },
-  limitWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: theme.danger,
-    backgroundColor: theme.overlay,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 20,
-  },
-  limitWarningText: {
-    flex: 1,
-    fontSize: 11,
-    color: theme.danger,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 0.5,
-  },
+
   tutorialButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1155,6 +1023,219 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.text,
     fontWeight: '700' as const,
   },
+  subscriptionContainer: {
+    borderWidth: 2,
+    borderColor: theme.border,
+    backgroundColor: theme.overlay,
+    padding: 20,
+    marginBottom: 20,
+  },
+  subscriptionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  subscriptionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  subscriptionTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.text,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  subscriptionBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+  },
+  subscriptionBadgeActive: {
+    borderColor: theme.warning,
+    backgroundColor: 'rgba(253, 180, 88, 0.15)',
+  },
+  subscriptionBadgeText: {
+    fontSize: 10,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+    fontWeight: '700' as const,
+  },
+  subscriptionBadgeTextActive: {
+    color: theme.warning,
+  },
+  subscriptionPlans: {
+    gap: 12,
+  },
+  planCard: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+    padding: 16,
+  },
+  planCardPremium: {
+    borderColor: theme.border,
+  },
+  planCardActive: {
+    borderColor: theme.primary,
+    borderWidth: 2,
+  },
+  planHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  planName: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  planNameActive: {
+    color: theme.text,
+  },
+  currentPlanTag: {
+    marginLeft: 'auto' as const,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: theme.primary,
+  },
+  currentPlanTagText: {
+    fontSize: 8,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+    fontWeight: '700' as const,
+  },
+  planDesc: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    marginBottom: 8,
+    lineHeight: 16,
+  },
+  planPrice: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+  },
+  planPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    marginBottom: 12,
+  },
+  planPricePremium: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: theme.text,
+    fontFamily: 'monospace' as const,
+  },
+  planAutoRenew: {
+    fontSize: 10,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  subscribeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    backgroundColor: theme.primary,
+  },
+  subscribeButtonText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.background,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  cancelSubscriptionButton: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: theme.danger,
+  },
+  cancelSubscriptionText: {
+    fontSize: 10,
+    color: theme.danger,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+    fontWeight: '700' as const,
+  },
+  clearanceInline: {
+    width: '100%',
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+  },
+  clearanceLevelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+    marginBottom: 12,
+  },
+  clearanceLevelLabel: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  clearanceLevelBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.overlay,
+  },
+  clearanceLevelBadgeActive: {
+    borderColor: theme.warning,
+    backgroundColor: 'rgba(253, 180, 88, 0.15)',
+  },
+  clearanceLevelValue: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  clearanceLevelValueActive: {
+    color: theme.warning,
+  },
+  upgradeClearanceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: theme.primary,
+    backgroundColor: theme.background,
+  },
+  upgradeClearanceText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
   backupContainer: {
     borderWidth: 2,
     borderColor: theme.border,
@@ -1199,5 +1280,23 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.text,
     fontFamily: 'monospace' as const,
     letterSpacing: 1,
+  },
+  linkWebButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.primary,
+    backgroundColor: theme.overlay,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 12,
+  },
+  linkWebText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
   },
 });

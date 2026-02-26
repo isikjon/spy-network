@@ -13,6 +13,8 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 
+export type SubscriptionLevel = 'basic' | 'working';
+
 const STORAGE_KEYS = {
   PHONE_NUMBER: 'user_phone',
   SESSION_TOKEN: 'user_session_token',
@@ -21,6 +23,7 @@ const STORAGE_KEYS = {
   LANGUAGE: 'app_language',
   TUTORIAL_COMPLETED: 'tutorial_completed',
   APP_DATA_CACHE: 'app_data_cache_v1',
+  SUBSCRIPTION: 'subscription_level',
 
   LEGACY_DOSSIERS: 'contact_dossiers',
   LEGACY_SECTORS: 'user_sectors',
@@ -67,6 +70,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const [currentLanguage, setCurrentLanguage] = useState<Language>('en');
   const [t, setT] = useState<Translations>(translations.en);
   const [tutorialCompleted, setTutorialCompleted] = useState<boolean>(false);
+  const [subscriptionLevel, setSubscriptionLevel] = useState<SubscriptionLevel>('basic');
 
   const phoneQuery = useQuery({
     queryKey: ['user_phone'],
@@ -102,6 +106,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queryFn: async () => {
       const stored = await AsyncStorage.getItem(STORAGE_KEYS.TUTORIAL_COMPLETED);
       return stored === 'true';
+    },
+  });
+
+  const subscriptionQuery = useQuery({
+    queryKey: ['subscription'],
+    queryFn: async () => {
+      const stored = await AsyncStorage.getItem(STORAGE_KEYS.SUBSCRIPTION);
+      return (stored as SubscriptionLevel) || 'basic';
     },
   });
 
@@ -154,6 +166,18 @@ export const [AppProvider, useApp] = createContextHook(() => {
       return completed;
     },
   });
+
+  const { mutate: saveSubscription } = useMutation({
+    mutationFn: async (level: SubscriptionLevel) => {
+      await AsyncStorage.setItem(STORAGE_KEYS.SUBSCRIPTION, level);
+      return level;
+    },
+  });
+
+  const changeSubscription = useCallback((level: SubscriptionLevel) => {
+    setSubscriptionLevel(level);
+    saveSubscription(level);
+  }, [saveSubscription]);
 
   const persistAppDataCache = useCallback(async (next: AppDataCache) => {
     try {
@@ -208,6 +232,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
       setTutorialCompleted(tutorialQuery.data);
     }
   }, [tutorialQuery.data]);
+
+  useEffect(() => {
+    if (subscriptionQuery.data) {
+      setSubscriptionLevel(subscriptionQuery.data);
+    }
+  }, [subscriptionQuery.data]);
 
   useEffect(() => {
     if (cacheQuery.data) {
@@ -706,6 +736,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
     createBackup,
     restoreBackup,
+
+    subscriptionLevel,
+    changeSubscription,
   };
 });
 

@@ -1,5 +1,4 @@
 import { useApp } from '@/contexts/AppContext';
-import { useWebDossier } from '@/contexts/WebDossierContext';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import {
   FileText,
@@ -39,30 +38,8 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Contacts from 'expo-contacts';
 
-function useSafeLocalSearchParams<T extends Record<string, string>>(): Partial<T> {
-  try {
-    return useLocalSearchParams<T>();
-  } catch {
-    return {} as Partial<T>;
-  }
-}
-
 export default function DossierScreen() {
-  const routeParams = useSafeLocalSearchParams<{ id: string; edit: string }>();
-  const { selectedDossierId, selectedEdit, closeDossier } = useWebDossier();
-
-  const isWebEmbed = Platform.OS === 'web' && !!selectedDossierId;
-  const id = isWebEmbed ? selectedDossierId : routeParams.id;
-  const edit = isWebEmbed ? (selectedEdit ? 'true' : undefined) : routeParams.edit;
-
-  const goBack = () => {
-    if (isWebEmbed) {
-      closeDossier();
-    } else {
-      router.back();
-    }
-  };
-
+  const { id, edit } = useLocalSearchParams<{ id: string; edit?: string }>();
   const { dossiers, updateDossier, deleteDossier, theme, sectors: userSectors, powerGroupings, addPowerGrouping, t } = useApp();
   const [isAddingEntry, setIsAddingEntry] = useState(false);
   const [newEntry, setNewEntry] = useState('');
@@ -330,7 +307,7 @@ export default function DossierScreen() {
           style: 'destructive',
           onPress: () => {
             deleteDossier(id!);
-            goBack();
+            router.back();
           },
         },
       ]
@@ -505,11 +482,11 @@ export default function DossierScreen() {
 
   return (
     <View style={styles.background}>
-      {!isWebEmbed && <Stack.Screen options={{ headerShown: false }} />}
+      <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle={theme.background === '#000000' ? 'light-content' : 'dark-content'} />
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={goBack} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
             <ArrowLeft size={24} color={theme.primary} />
           </TouchableOpacity>
           <FileText size={24} color={theme.primary} strokeWidth={1.5} />
