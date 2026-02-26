@@ -12,11 +12,13 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.primaryDim,
-        tabBarStyle: {
-          backgroundColor: theme.background,
-          borderTopColor: theme.border,
-          borderTopWidth: 2,
-        },
+        tabBarStyle: Platform.OS === 'web'
+          ? { display: 'none' }
+          : {
+              backgroundColor: theme.background,
+              borderTopColor: theme.border,
+              borderTopWidth: 2,
+            },
         headerShown: false,
       }}
     >

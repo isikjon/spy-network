@@ -1,6 +1,6 @@
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Shield, RefreshCw, CheckCircle, AlertTriangle, Smartphone } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
@@ -17,6 +18,7 @@ import QRCode from 'react-native-qrcode-svg';
 type AuthStep = 'loading' | 'qr' | 'waiting' | 'done' | 'error';
 
 const BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://spynetwork.ru';
+const DEV_TEST_PHONE = '71111111111';
 
 export default function WebAuthScreen() {
   const { loginWithToken, theme } = useApp();
@@ -28,7 +30,18 @@ export default function WebAuthScreen() {
   const activeRef = useRef(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [showDevForm, setShowDevForm] = useState(false);
+  const [devPhone, setDevPhone] = useState(DEV_TEST_PHONE);
+  const [devLoading, setDevLoading] = useState(false);
+  const [devError, setDevError] = useState('');
+
+  const params = useLocalSearchParams<{ dev?: string }>();
+  useEffect(() => {
+    if (params.dev === '1') setShowDevForm(true);
+  }, [params.dev]);
+
   const createSessionMutation = trpc.qrAuth.createSession.useMutation();
+  const requestCallMutation = trpc.phoneAuth.requestCall.useMutation();
   const utils = trpc.useUtils();
   const styles = createStyles(theme);
 
@@ -119,15 +132,52 @@ export default function WebAuthScreen() {
     }
   }, [createSessionMutation, startPoll, stopPoll]);
 
-  // Создаём сессию при монтировании
+  const devLogin = useCallback(async () => {
+    let phone = devPhone.replace(/\D/g, '');
+    if (phone.length === 10) phone = '7' + phone;
+    if (phone.length === 11 && phone.startsWith('8')) phone = '7' + phone.slice(1);
+    if (phone.length < 10) {
+      setDevError('Введите номер (тест: 71111111111)');
+      return;
+    }
+    setDevError('');
+    setDevLoading(true);
+    try {
+      await requestCallMutation.mutateAsync({ phone });
+      let attempts = 0;
+      const maxAttempts = 30;
+      while (attempts < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const status = await utils.phoneAuth.checkStatus.fetch({ phone });
+        if (status.ok && status.token && status.phone) {
+          await loginWithToken(status.phone, status.token);
+          setTimeout(() => router.replace('/(tabs)'), 300);
+          return;
+        }
+        if (status.ok === false && (status.error === 'EXPIRED' || status.error === 'NOT_FOUND')) {
+          setDevError(status.error === 'EXPIRED' ? 'Сессия истекла' : 'Сессия не найдена');
+          break;
+        }
+        attempts++;
+      }
+      if (attempts >= maxAttempts) setDevError('Таймаут');
+    } catch (e: any) {
+      setDevError(e?.message || 'Ошибка');
+    } finally {
+      setDevLoading(false);
+    }
+  }, [devPhone, loginWithToken, requestCallMutation, utils.phoneAuth.checkStatus]);
+
+  // Создаём сессию при монтировании (только если не показываем dev-форму)
   useEffect(() => {
+    if (showDevForm) return;
     activeRef.current = true;
     createSession();
     return () => {
       activeRef.current = false;
       stopPoll();
     };
-  }, []);
+  }, [showDevForm]);
 
   const deepLink = `rork-app://qr-confirm?session=${sessionId}&base=${encodeURIComponent(BASE_URL)}`;
 
@@ -148,6 +198,41 @@ export default function WebAuthScreen() {
           {/* Content */}
           <View style={styles.form}>
 
+            {/* Dev login form */}
+            {showDevForm ? (
+              <View style={styles.devForm}>
+                <Text style={styles.devTitle}>Вход для разработчика</Text>
+                <Text style={styles.hintText}>Тестовый номер: 71111111111 (автовход)</Text>
+                <TextInput
+                  style={styles.devInput}
+                  value={devPhone}
+                  onChangeText={setDevPhone}
+                  placeholder="79XXXXXXXXX"
+                  placeholderTextColor={theme.primaryDim}
+                  keyboardType="phone-pad"
+                  editable={!devLoading}
+                />
+                {devError ? <Text style={styles.devError}>{devError}</Text> : null}
+                <TouchableOpacity
+                  style={[styles.button, styles.devButton]}
+                  onPress={devLogin}
+                  activeOpacity={0.7}
+                  disabled={devLoading}
+                >
+                  <View style={styles.buttonBorder}>
+                    {devLoading ? (
+                      <ActivityIndicator color={theme.primary} size="small" />
+                    ) : (
+                      <Text style={styles.buttonText}>ВОЙТИ</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => { setShowDevForm(false); setDevError(''); }} style={styles.devBack}>
+                  <Text style={styles.footerText}>← Назад к QR-входу</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
             {/* Loading */}
             {step === 'loading' && (
               <View style={styles.centered}>
@@ -226,10 +311,19 @@ export default function WebAuthScreen() {
                 </TouchableOpacity>
               </>
             )}
+              </>
+            )}
           </View>
 
           {/* Footer */}
           <View style={styles.footer}>
+            {!showDevForm && (
+              <TouchableOpacity onPress={() => setShowDevForm(true)} style={{ marginBottom: 8 }}>
+                <Text style={[styles.footerText, { textDecorationLine: 'underline', color: theme.primary }]}>
+                  Для разработчика (вход по номеру)
+                </Text>
+              </TouchableOpacity>
+            )}
             <Text style={styles.footerText}>SYSTEM STATUS: ACTIVE</Text>
             <Text style={styles.footerText}>ENCRYPTION: AES-256</Text>
             <Text style={styles.footerText}>AUTH: QR CODE</Text>
@@ -382,4 +476,36 @@ const createStyles = (theme: any) => StyleSheet.create({
     letterSpacing: 1,
     textAlign: 'center',
   },
+  devForm: {
+    width: '100%',
+    maxWidth: 320,
+    gap: 16,
+    alignItems: 'center',
+  },
+  devTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+    marginBottom: 8,
+  },
+  devInput: {
+    borderWidth: 2,
+    borderColor: theme.border,
+    backgroundColor: theme.overlay,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: theme.text,
+    fontFamily: 'monospace' as const,
+    width: '100%',
+  },
+  devError: {
+    fontSize: 12,
+    color: theme.danger,
+    fontFamily: 'monospace' as const,
+  },
+  devButton: { width: '100%' },
+  devBack: { marginTop: 12 },
 });

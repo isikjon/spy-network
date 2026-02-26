@@ -186,7 +186,9 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                   <Text style={styles.webClearanceLabel}>{t.profile.clearanceSection || 'ДОПУСК'}</Text>
                 </View>
                 <View style={styles.webProfileColRight}>
-                  <Text style={styles.webPhoneLast3}>{phoneNumber ? phoneNumber.slice(-3) : '---'}</Text>
+                  <View style={styles.webPhoneLast3Wrap}>
+                    <Text style={styles.webPhoneLast3}>{phoneNumber ? phoneNumber.slice(-3) : '---'}</Text>
+                  </View>
                   <Text style={styles.webClearanceLevel}>УРОВЕНЬ {subscriptionLevel === 'working' ? '2' : '1'}</Text>
                 </View>
               </View>
@@ -305,7 +307,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                     )}
                   </View>
                   <Text style={styles.planDesc}>{t.profile.subscriptionBasicDesc}</Text>
-                  <Text style={styles.planPrice}>0 \u20bd</Text>
+                  <Text style={styles.planPrice}>{currentLanguage === 'ru' ? 'Бесплатно' : 'Free'}</Text>
                 </View>
 
                 <View style={[
@@ -866,12 +868,18 @@ const createStyles = (theme: any) => StyleSheet.create({
   webBlockMinHeight: {
     minHeight: 240,
   },
+  webPhoneLast3Wrap: {
+    height: 100,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
   webPhoneLast3: {
-    fontSize: 48,
+    fontSize: 72,
     fontWeight: '700' as const,
     color: theme.primary,
     fontFamily: 'monospace' as const,
     letterSpacing: 4,
+    lineHeight: 100,
   },
   webClearanceLabel: {
     fontSize: 12,
