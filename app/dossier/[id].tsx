@@ -607,7 +607,7 @@ export default function DossierScreen() {
                           editImportance === level && styles.optionTextActive,
                         ]}
                       >
-                        {level.toUpperCase()}
+                        {(t.contact as any)[level]?.toUpperCase() ?? level.toUpperCase()}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -629,7 +629,7 @@ export default function DossierScreen() {
                         { color: getImportanceColor(dossier.importance) },
                       ]}
                     >
-                      {dossier.importance.toUpperCase()}
+                      {(t.contact as any)[dossier.importance]?.toUpperCase() ?? dossier.importance.toUpperCase()}
                     </Text>
                   </View>
                 </View>
