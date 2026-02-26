@@ -230,26 +230,53 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Инфо-блок про веб-версию + кнопка QR */}
-          <View style={styles.webInfoBlock}>
-            <View style={styles.webInfoHeader}>
-              <Monitor size={18} color={theme.primary} strokeWidth={1.5} />
-              <Text style={styles.webInfoTitle}>ВЕБ-ВЕРСИЯ</Text>
+          {/* На вебе — блок подписки, на мобиле — QR-блок */}
+          {Platform.OS === 'web' ? (
+            userLevel < 2 && (
+              <TouchableOpacity
+                style={[styles.accessButton, paymentLoading && { opacity: 0.6 }]}
+                onPress={handleGetAccess}
+                activeOpacity={0.7}
+                disabled={paymentLoading}
+              >
+                {paymentLoading ? (
+                  <ActivityIndicator color={theme.primary} size="small" />
+                ) : (
+                  <CreditCard size={20} color={theme.primary} strokeWidth={1.5} />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accessButtonTitle}>
+                    {currentLanguage === 'ru' ? 'ПОВЫСИТЬ ДОПУСК' : 'UPGRADE ACCESS'}
+                  </Text>
+                  <Text style={styles.accessButtonSubtitle}>
+                    {currentLanguage === 'ru'
+                      ? 'Оплатить онлайн — 99 руб./нед. • Безлимит контактов'
+                      : 'Pay online — 99 RUB/week • Unlimited contacts'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )
+          ) : (
+            <View style={styles.webInfoBlock}>
+              <View style={styles.webInfoHeader}>
+                <Monitor size={18} color={theme.primary} strokeWidth={1.5} />
+                <Text style={styles.webInfoTitle}>ВЕБ-ВЕРСИЯ</Text>
+              </View>
+              <Text style={styles.webInfoText}>
+                Для запуска программы на компьютере войдите на сайт{' '}
+                <Text style={styles.webInfoLink}>www.spynetwork.ru</Text>{' '}
+                и авторизуйтесь в системе, отсканировав QR код. В Web версии доступно расширенное управление профилем.
+              </Text>
+              <TouchableOpacity
+                style={styles.qrScanButton}
+                onPress={() => router.push('/qr-scanner')}
+                activeOpacity={0.7}
+              >
+                <QrCode size={20} color={theme.background} strokeWidth={2} />
+                <Text style={styles.qrScanButtonText}>СКАНИРОВАТЬ QR КОД</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.webInfoText}>
-              Для запуска программы на компьютере войдите на сайт{' '}
-              <Text style={styles.webInfoLink}>www.spynetwork.ru</Text>{' '}
-              и авторизуйтесь в системе, отсканировав QR код. В Web версии доступно расширенное управление профилем.
-            </Text>
-            <TouchableOpacity
-              style={styles.qrScanButton}
-              onPress={() => router.push('/qr-scanner')}
-              activeOpacity={0.7}
-            >
-              <QrCode size={20} color={theme.background} strokeWidth={2} />
-              <Text style={styles.qrScanButtonText}>СКАНИРОВАТЬ QR КОД</Text>
-            </TouchableOpacity>
-          </View>
+          )}
 
           <View style={styles.statsContainer}>
             <View style={styles.statBox}>
@@ -305,7 +332,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {userLevel < 2 && (
+          {userLevel < 2 && Platform.OS !== 'web' && (
             <TouchableOpacity
               style={[styles.accessButton, paymentLoading && { opacity: 0.6 }]}
               onPress={handleGetAccess}
@@ -319,16 +346,12 @@ export default function ProfileScreen() {
               )}
               <View style={{ flex: 1 }}>
                 <Text style={styles.accessButtonTitle}>
-                  {currentLanguage === 'ru' ? 'ПОЛУЧИТЬ ДОПУСК' : 'GET ACCESS'}
+                  {currentLanguage === 'ru' ? 'ПОВЫСИТЬ ДОПУСК' : 'UPGRADE ACCESS'}
                 </Text>
                 <Text style={styles.accessButtonSubtitle}>
                   {currentLanguage === 'ru'
-                    ? Platform.OS === 'web'
-                      ? 'Оплатить онлайн — 99 руб./нед. • Безлимит контактов'
-                      : 'Безлимит контактов, без рекламы — 99 руб./нед.'
-                    : Platform.OS === 'web'
-                      ? 'Pay online — 99 RUB/week • Unlimited contacts'
-                      : 'Unlimited contacts, no ads — 99 RUB/week'}
+                    ? 'Повысьте допуск в веб-версии системы'
+                    : 'Upgrade your access in the web version'}
                 </Text>
               </View>
             </TouchableOpacity>
