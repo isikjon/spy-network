@@ -121,7 +121,7 @@ app.use("/assets/*", serveStatic({ root: "dist" }));
 app.get("/favicon.ico", serveStatic({ root: "dist", path: "/favicon.ico" }));
 
 // SPA: /app и /app/* (в т.ч. /app/auth) — всегда index.html, иначе был 404 на /app/auth
-const serveAppHtml = async (c: { html: (body: string) => Response; text: (body: string, status?: number) => Response }) => {
+app.get("/app", async (c) => {
   const fs = await import("node:fs/promises");
   try {
     const html = await fs.readFile("dist/index.html", "utf-8");
@@ -129,9 +129,16 @@ const serveAppHtml = async (c: { html: (body: string) => Response; text: (body: 
   } catch {
     return c.text("App not built. Run: npx expo export --platform web", 404);
   }
-};
-app.get("/app", serveAppHtml);
-app.get("/app/*", serveAppHtml);
+});
+app.get("/app/*", async (c) => {
+  const fs = await import("node:fs/promises");
+  try {
+    const html = await fs.readFile("dist/index.html", "utf-8");
+    return c.html(html);
+  } catch {
+    return c.text("App not built. Run: npx expo export --platform web", 404);
+  }
+});
 
 // Статика приложения под /app (бандлы Expo под /app/_expo, /app/assets — если в dist так)
 app.use(
