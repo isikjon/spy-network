@@ -176,6 +176,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 24px;
     padding: 120px 24px 60px;
     position: relative;
     z-index: 2;
@@ -183,7 +184,33 @@ body {
 
 .hero-content {
     flex: 1;
-    max-width: 600px;
+    max-width: 520px;
+}
+
+.hero-cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.btn-web {
+    background: var(--primary);
+    border: 2px solid var(--primary);
+    color: var(--bg);
+    box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+}
+
+.btn-web:hover {
+    box-shadow: 0 0 35px rgba(0, 255, 65, 0.6);
+    color: var(--bg);
+}
+
+.btn-web-large {
+    padding: 18px 40px;
+    font-size: 17px;
+    letter-spacing: 3px;
+    gap: 14px;
 }
 
 .status-line {

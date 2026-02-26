@@ -26,7 +26,7 @@ function RootLayoutNav() {
   const rootSegment = segments?.[0] ?? '';
 
   // На вебе приложение под /app/* — pathname /app/auth даёт segments ['app','auth'], поэтому
-  // rootSegment === 'auth' ложно. Считаем inAuth по pathname, чтобы не редиректить с /app/auth?dev=1 на /auth.
+  // rootSegment === 'auth' ложно. Считаем inAuth по pathname, чтобы не редиректить с /app/auth на /auth.
   const isWeb = Platform.OS === 'web' && typeof window !== 'undefined';
   const pathnameIsAuth = isWeb && /\/auth\/?(\?|$)/.test(window.location.pathname);
   const inAuth = rootSegment === 'auth' || pathnameIsAuth;
