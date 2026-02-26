@@ -1,4 +1,5 @@
 import { useApp } from '@/contexts/AppContext';
+import { useWebDossier } from '@/contexts/WebDossierContext';
 import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
 import { Plus, Search, Shield, FileText, Users, X } from 'lucide-react-native';
@@ -22,6 +23,15 @@ import { ContactDossier } from '@/types';
 
 export default function DossiersScreen() {
   const { dossiers, addDossier, theme, t, phoneNumber, currentLanguage } = useApp();
+  const { openDossier } = useWebDossier();
+
+  const navigateToDossier = (id: string, edit = false) => {
+    if (Platform.OS === 'web') {
+      openDossier(id, edit);
+    } else {
+      router.push({ pathname: '/dossier/[id]', params: { id, ...(edit ? { edit: 'true' } : {}) } });
+    }
+  };
 
   const levelQuery = trpc.appData.getMyLevel.useQuery(undefined, {
     enabled: !!phoneNumber,
@@ -129,7 +139,7 @@ export default function DossiersScreen() {
     addDossier(newDossier);
     setShowContactsModal(false);
     setContactSearch('');
-    router.push({ pathname: '/dossier/[id]', params: { id: newDossier.contact.id, edit: 'true' } });
+    navigateToDossier(newDossier.contact.id, true);
   };
 
   const handleAddMockContact = () => {
@@ -160,7 +170,7 @@ export default function DossiersScreen() {
       lastInteraction: new Date(),
     };
     addDossier(mockContact);
-    router.push({ pathname: '/dossier/[id]', params: { id: mockContact.contact.id, edit: 'true' } });
+    navigateToDossier(mockContact.contact.id, true);
   };
 
   const getImportanceColor = (importance: string) => {
@@ -179,7 +189,7 @@ export default function DossiersScreen() {
   const renderDossier = ({ item }: { item: ContactDossier }) => (
     <TouchableOpacity
       style={styles.dossierCard}
-      onPress={() => router.push({ pathname: '/dossier/[id]', params: { id: item.contact.id } })}
+      onPress={() => navigateToDossier(item.contact.id)}
       activeOpacity={0.7}
     >
       <View style={styles.dossierHeader}>

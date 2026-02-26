@@ -1,20 +1,23 @@
 import { useApp } from '@/contexts/AppContext';
+import { WebDossierProvider, useWebDossier } from '@/contexts/WebDossierContext';
 import { ChevronRight, ChevronLeft } from 'lucide-react-native';
 import { useState } from 'react';
-import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import DossiersScreen from './index';
 import NetworkScreen from './network';
 import ProfileScreen from './profile';
+import DossierDetail from '../dossier/[id]';
 
-export default function WebTabLayout() {
+function WebLayoutInner() {
   const { theme } = useApp();
+  const { selectedDossierId } = useWebDossier();
   const [profileVisible, setProfileVisible] = useState(true);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Колонка ДОСЬЕ */}
+      {/* Колонка ДОСЬЕ / Детали досье */}
       <View style={[styles.column, { borderRightColor: theme.border }]}>
-        <DossiersScreen />
+        {selectedDossierId ? <DossierDetail /> : <DossiersScreen />}
       </View>
 
       {/* Колонка СЕТЬ */}
@@ -25,7 +28,6 @@ export default function WebTabLayout() {
       {/* Колонка ПРОФИЛЬ — сворачивается */}
       {profileVisible && (
         <View style={[styles.profileColumn, { borderLeftColor: theme.border }]}>
-          {/* Кнопка сворачивания — внутри колонки профиля */}
           <TouchableOpacity
             style={[styles.toggleButton, { backgroundColor: theme.background, borderColor: theme.border }]}
             onPress={() => setProfileVisible(false)}
@@ -37,7 +39,6 @@ export default function WebTabLayout() {
         </View>
       )}
 
-      {/* Кнопка разворачивания — когда профиль скрыт */}
       {!profileVisible && (
         <TouchableOpacity
           style={[styles.expandButton, { backgroundColor: theme.background, borderColor: theme.border }]}
@@ -48,6 +49,14 @@ export default function WebTabLayout() {
         </TouchableOpacity>
       )}
     </View>
+  );
+}
+
+export default function WebTabLayout() {
+  return (
+    <WebDossierProvider>
+      <WebLayoutInner />
+    </WebDossierProvider>
   );
 }
 
