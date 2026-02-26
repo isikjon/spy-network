@@ -10,7 +10,10 @@ const userDataKey = (phone: string) => `user:${phone}:data`;
 
 const ContactRelationSchema = z.object({
   contactId: z.string().min(1),
-  strength: z.number().int().min(0).max(100),
+  strength: z.preprocess(
+    (v) => typeof v === 'number' ? Math.min(Math.max(Math.round(v), 0), 10) : 5,
+    z.number().int().min(0).max(10)
+  ),
   description: z.string().optional(),
 });
 
@@ -106,6 +109,15 @@ export const appDataRouter = createTRPCRouter({
       const fallback = emptyUserData(phone);
       await storeSet(key, fallback);
       return { ok: true as const, data: fallback };
+    }
+
+    // Проверяем нужна ли нормализация (strength > 10 в старых данных)
+    const hasOutOfRangeStrength = (stored as any)?.dossiers?.some((d: any) =>
+      d?.relations?.some((r: any) => typeof r?.strength === 'number' && r.strength > 10)
+    );
+    if (hasOutOfRangeStrength) {
+      console.log("[backend] appData.getMyData: normalizing strength values (>10 found), saving fixed data");
+      await storeSet(key, { ...parsed.data, updatedAt: Date.now() });
     }
 
     return { ok: true as const, data: parsed.data };

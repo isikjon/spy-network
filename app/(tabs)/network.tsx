@@ -631,8 +631,8 @@ export default function NetworkScreen() {
                   x2={conn.to.x}
                   y2={conn.to.y}
                   stroke={theme.primary}
-                  strokeWidth={Math.max(0.5, conn.strength / 2) / scale}
-                  opacity={Math.min(0.6, conn.strength / 10)}
+                  strokeWidth={Math.max(0.5, Math.min(conn.strength, 10) / 2) / scale}
+                  opacity={Math.min(0.6, Math.min(conn.strength, 10) / 10)}
                 />
               ))}
 
