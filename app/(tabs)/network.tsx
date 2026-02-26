@@ -1160,66 +1160,70 @@ export default function NetworkScreen({ onOpenDossier }: NetworkScreenProps) {
               />
             )}
 
-            <View style={styles.stats}>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{dossiers.length}</Text>
-                <Text style={styles.statLabel}>{t.network.totalContacts}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>
-                  {dossiers.filter((d) => d.importance === 'critical').length}
-                </Text>
-                <Text style={styles.statLabel}>{t.network.critical}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>
-                  {dossiers.reduce((sum, d) => sum + d.relations.length, 0)}
-                </Text>
-                <Text style={styles.statLabel}>{t.network.connections}</Text>
-              </View>
-            </View>
-
-            <View style={styles.infoGrid}>
-              <View style={styles.infoSection}>
-                <Text style={styles.infoTitle}>{t.network.importance}</Text>
-                <View style={styles.infoItems}>
-                  <View style={styles.infoItem}>
-                    <Circle size={14} color={theme.danger} fill={theme.danger} />
-                    <Text style={styles.infoText}>{t.network.critical}</Text>
+            {Platform.OS !== 'web' && (
+              <>
+                <View style={styles.stats}>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statValue}>{dossiers.length}</Text>
+                    <Text style={styles.statLabel}>{t.network.totalContacts}</Text>
                   </View>
-                  <View style={styles.infoItem}>
-                    <Circle size={14} color={theme.warning} fill={theme.warning} />
-                    <Text style={styles.infoText}>{t.network.high}</Text>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statValue}>
+                      {dossiers.filter((d) => d.importance === 'critical').length}
+                    </Text>
+                    <Text style={styles.statLabel}>{t.network.critical}</Text>
                   </View>
-                  <View style={styles.infoItem}>
-                    <Circle size={14} color={theme.primary} fill={theme.primary} />
-                    <Text style={styles.infoText}>{t.network.medium}</Text>
-                  </View>
-                  <View style={styles.infoItem}>
-                    <Circle size={14} color={theme.primaryDim} fill={theme.primaryDim} />
-                    <Text style={styles.infoText}>{t.network.low}</Text>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statValue}>
+                      {dossiers.reduce((sum, d) => sum + d.relations.length, 0)}
+                    </Text>
+                    <Text style={styles.statLabel}>{t.network.connections}</Text>
                   </View>
                 </View>
-              </View>
 
-              <View style={styles.infoSection}>
-                <Text style={styles.infoTitle}>{t.network.circles}</Text>
-                <View style={styles.infoItems}>
-                  <View style={styles.infoItem}>
-                    <Text style={styles.circleLabel}>{t.network.outer}</Text>
-                    <Text style={styles.infoText}>{t.network.development}</Text>
+                <View style={styles.infoGrid}>
+                  <View style={styles.infoSection}>
+                    <Text style={styles.infoTitle}>{t.network.importance}</Text>
+                    <View style={styles.infoItems}>
+                      <View style={styles.infoItem}>
+                        <Circle size={14} color={theme.danger} fill={theme.danger} />
+                        <Text style={styles.infoText}>{t.network.critical}</Text>
+                      </View>
+                      <View style={styles.infoItem}>
+                        <Circle size={14} color={theme.warning} fill={theme.warning} />
+                        <Text style={styles.infoText}>{t.network.high}</Text>
+                      </View>
+                      <View style={styles.infoItem}>
+                        <Circle size={14} color={theme.primary} fill={theme.primary} />
+                        <Text style={styles.infoText}>{t.network.medium}</Text>
+                      </View>
+                      <View style={styles.infoItem}>
+                        <Circle size={14} color={theme.primaryDim} fill={theme.primaryDim} />
+                        <Text style={styles.infoText}>{t.network.low}</Text>
+                      </View>
+                    </View>
                   </View>
-                  <View style={styles.infoItem}>
-                    <Text style={styles.circleLabel}>{t.network.mid}</Text>
-                    <Text style={styles.infoText}>{t.network.productivity}</Text>
-                  </View>
-                  <View style={styles.infoItem}>
-                    <Text style={styles.circleLabel}>{t.network.inner}</Text>
-                    <Text style={styles.infoText}>{t.network.support}</Text>
+
+                  <View style={styles.infoSection}>
+                    <Text style={styles.infoTitle}>{t.network.circles}</Text>
+                    <View style={styles.infoItems}>
+                      <View style={styles.infoItem}>
+                        <Text style={styles.circleLabel}>{t.network.outer}</Text>
+                        <Text style={styles.infoText}>{t.network.development}</Text>
+                      </View>
+                      <View style={styles.infoItem}>
+                        <Text style={styles.circleLabel}>{t.network.mid}</Text>
+                        <Text style={styles.infoText}>{t.network.productivity}</Text>
+                      </View>
+                      <View style={styles.infoItem}>
+                        <Text style={styles.circleLabel}>{t.network.inner}</Text>
+                        <Text style={styles.infoText}>{t.network.support}</Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
-              </View>
-            </View>
+              </>
+            )}
           </ScrollView>
         )}
 
