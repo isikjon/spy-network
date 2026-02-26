@@ -880,7 +880,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.primary,
     fontFamily: 'monospace' as const,
     letterSpacing: 2,
-    marginTop: 4,
+    marginTop: 20,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -1140,7 +1140,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     letterSpacing: 2,
   },
   subscriptionBadge: {
-    marginTop: 20,
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderWidth: 1,
