@@ -240,8 +240,9 @@ export const phoneAuthRouter = createTRPCRouter({
  */
 async function ensureTestData(phone: string) {
   const dataKey = `user:${phone}:data`;
-  const existing = await storeGet(dataKey);
-  if (existing) return; // данные уже есть
+  const existing = await storeGet<{ dossiers?: unknown[] }>(dataKey);
+  // Пропускаем только если уже есть хотя бы один контакт
+  if (existing && Array.isArray((existing as any).dossiers) && (existing as any).dossiers.length > 0) return;
 
   console.log("[phone-auth] generating demo data for new user", phone);
 
