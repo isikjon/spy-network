@@ -120,7 +120,29 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
       ],
       addedDate: new Date(),
     };
-    addDossier(newDossier);
+    const result = addDossier(newDossier);
+    if (!result.ok && result.error === 'DUPLICATE') {
+      setShowContactsModal(false);
+      setContactSearch('');
+      Alert.alert(
+        t.dossiers.duplicateTitle || 'Контакт уже существует',
+        (t.dossiers.duplicateMessage || 'Контакт с таким номером уже есть в досье:') + ` "${result.existingName}"`,
+        [
+          { text: t.dossiers.cancel || 'Отмена', style: 'cancel' },
+          {
+            text: t.dossiers.openExisting || 'Открыть',
+            onPress: () => {
+              if (onOpenDossier) {
+                onOpenDossier({ id: result.existingId });
+              } else {
+                router.push({ pathname: '/dossier/[id]' as any, params: { id: result.existingId } });
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
     setShowContactsModal(false);
     setContactSearch('');
     if (onOpenDossier) {

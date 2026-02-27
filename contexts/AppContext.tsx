@@ -440,9 +440,27 @@ export const [AppProvider, useApp] = createContextHook(() => {
     });
   }, [appDataQuery.data, currentLanguage, phoneNumber, saveAppDataToServer, selfContactEnsuredForPhone]);
 
-  const addDossier = useCallback((dossier: ContactDossier) => {
+  const addDossier = useCallback((dossier: ContactDossier): { ok: true } | { ok: false; error: 'DUPLICATE'; existingId: string; existingName: string } => {
+    // Нормализация номера: только цифры
+    const normalizePhone = (p: string) => p.replace(/\D/g, '');
+
+    const newPhones = (dossier.contact.phoneNumbers || [])
+      .map(normalizePhone)
+      .filter(Boolean);
+
+    if (newPhones.length > 0) {
+      for (const existing of dossiers) {
+        const existingPhones = (existing.contact.phoneNumbers || []).map(normalizePhone).filter(Boolean);
+        const hasDuplicate = existingPhones.some(ep => newPhones.includes(ep));
+        if (hasDuplicate) {
+          return { ok: false, error: 'DUPLICATE', existingId: existing.contact.id, existingName: existing.contact.name };
+        }
+      }
+    }
+
     const updated = [...dossiers, dossier];
     saveAppDataToServer({ dossiers: updated, sectors, powerGroupings });
+    return { ok: true };
   }, [dossiers, saveAppDataToServer, sectors, powerGroupings]);
 
   const updateDossier = useCallback((id: string, updates: Partial<ContactDossier>) => {

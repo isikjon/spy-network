@@ -109,6 +109,9 @@ export const translations = {
       unknownPosition: 'Неизвестная должность',
       contactImported: 'Контакт импортирован из адресной книги',
       contactAddedToNetwork: 'Контакт добавлен в сеть',
+      duplicateTitle: 'Контакт уже существует',
+      duplicateMessage: 'Контакт с таким номером уже есть в досье:',
+      openExisting: 'Открыть',
     },
     network: {
       title: 'СЕТЬ',
@@ -383,6 +386,9 @@ export const translations = {
       unknownPosition: 'Unknown Position',
       contactImported: 'Contact imported from address book',
       contactAddedToNetwork: 'Contact added to network',
+      duplicateTitle: 'Contact already exists',
+      duplicateMessage: 'A contact with this phone number already exists in dossiers:',
+      openExisting: 'Open',
     },
     network: {
       title: 'NETWORK',
