@@ -120,11 +120,31 @@ app.use("/_expo/*", serveStatic({ root: "dist" }));
 app.use("/assets/*", serveStatic({ root: "dist" }));
 app.get("/favicon.ico", serveStatic({ root: "dist", path: "/favicon.ico" }));
 
-// SPA: /app и /app/* (в т.ч. /app/auth) — всегда index.html, иначе был 404 на /app/auth
+// Скрипт-шим: убирает /app из pathname до старта React (чтобы Expo Router нашёл роут),
+// затем патчит history API чтобы /app-префикс возвращался при каждой навигации.
+const BASE_PATH_SHIM = `<script>(function(){
+  var B='/app';
+  var _pu=history.pushState.bind(history);
+  var _re=history.replaceState.bind(history);
+  var p=location.pathname;
+  if(p===B||p.startsWith(B+'/')){
+    _re(null,'', (p.slice(B.length)||'/') + location.search + location.hash);
+  }
+  function ab(u){
+    if(!u||typeof u!=='string')return u;
+    if(u.startsWith(B)||u.startsWith('http')||u.startsWith('//'))return u;
+    return B+(u==='/'?'':u.startsWith('/')?u:'/'+u);
+  }
+  history.pushState=function(s,t,u){_pu(s,t,ab(u));};
+  history.replaceState=function(s,t,u){_re(s,t,ab(u));};
+})()</script>`;
+
+// SPA: /app и /app/* — всегда index.html со встроенным шимом базового пути
 app.get("/app", async (c) => {
   const fs = await import("node:fs/promises");
   try {
-    const html = await fs.readFile("dist/index.html", "utf-8");
+    let html = await fs.readFile("dist/index.html", "utf-8");
+    html = html.replace("</head>", BASE_PATH_SHIM + "</head>");
     return c.html(html);
   } catch {
     return c.text("App not built. Run: npx expo export --platform web", 404);
@@ -133,7 +153,8 @@ app.get("/app", async (c) => {
 app.get("/app/*", async (c) => {
   const fs = await import("node:fs/promises");
   try {
-    const html = await fs.readFile("dist/index.html", "utf-8");
+    let html = await fs.readFile("dist/index.html", "utf-8");
+    html = html.replace("</head>", BASE_PATH_SHIM + "</head>");
     return c.html(html);
   } catch {
     return c.text("App not built. Run: npx expo export --platform web", 404);
