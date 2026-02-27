@@ -206,7 +206,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
 
                 <View style={styles.clearanceInline}>
                   <View style={styles.clearanceLevelRow}>
-                    <Text style={styles.clearanceLevelLabel}>{t.profile.clearanceLevel}</Text>
+                    <Text style={styles.clearanceLevelLabel}>ДОПУСК</Text>
                     <View style={[
                       styles.clearanceLevelBadge,
                       subscriptionLevel === 'working' && styles.clearanceLevelBadgeActive,
@@ -215,7 +215,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                         styles.clearanceLevelValue,
                         subscriptionLevel === 'working' && styles.clearanceLevelValueActive,
                       ]}>
-                        {subscriptionLevel === 'working' ? t.profile.clearanceWorkingLevel : t.profile.clearanceBasicLevel}
+                        {subscriptionLevel === 'working' ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1'}
                       </Text>
                     </View>
                   </View>
@@ -228,7 +228,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                 activeOpacity={0.7}
               >
                 <QrCode size={20} color={theme.primary} />
-                <Text style={styles.linkWebText}>{t.profile.linkWeb || 'ПРИВЯЗАТЬ ВЕБ'}</Text>
+                <Text style={styles.linkWebText}>ПЕРЕЙТИ НА ВЕБ ВЕРСИЮ</Text>
                 <Monitor size={16} color={theme.primaryDim} style={{ marginLeft: 'auto' }} />
               </TouchableOpacity>
             </>
