@@ -141,7 +141,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const appDataQuery = trpc.appData.getMyData.useQuery(undefined, {
     enabled: !!phoneNumber,
-    staleTime: 15_000,
+    staleTime: 10_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const saveMyDataMutation = trpc.appData.saveMyData.useMutation();
@@ -379,8 +382,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
       STORAGE_KEYS.APP_DATA_CACHE,
     ]);
 
-    queryClient.removeQueries({ queryKey: ['appDataCache'] });
-    queryClient.removeQueries({ queryKey: ['trpc.appData.getMyData'] });
+    queryClient.clear();
   }, [queryClient]);
 
   const [selfContactEnsuredForPhone, setSelfContactEnsuredForPhone] = useState<string | null>(null);
