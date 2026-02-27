@@ -12,7 +12,8 @@
       [
         "expo-router",
         {
-          "origin": "https://rork.com/"
+          "origin": "https://rork.com/",
+          "basePath": "/app"
         }
       ],
       [
@@ -101,6 +102,7 @@
       "bundler": "metro"
     },
     "experiments": {
+      "baseUrl": "/app",
       "typedRoutes": true
     },
     "owner": "websensei6"

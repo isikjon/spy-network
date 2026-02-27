@@ -25,11 +25,7 @@ function RootLayoutNav() {
 
   const rootSegment = segments?.[0] ?? '';
 
-  // На вебе приложение под /app/* — pathname /app/auth даёт segments ['app','auth'], поэтому
-  // rootSegment === 'auth' ложно. Считаем inAuth по pathname, чтобы не редиректить с /app/auth на /auth.
-  const isWeb = Platform.OS === 'web' && typeof window !== 'undefined';
-  const pathnameIsAuth = isWeb && /\/auth\/?(\?|$)/.test(window.location.pathname);
-  const inAuth = rootSegment === 'auth' || pathnameIsAuth;
+  const inAuth = rootSegment === 'auth';
   const inAdmin = rootSegment === 'admin';
 
   useEffect(() => {
@@ -38,15 +34,10 @@ function RootLayoutNav() {
 
     if (!isAuthenticated && !inAuth && !inAdmin) {
       if (hasNavigated.current) return;
-      console.log('[RootLayoutNav] redirect -> auth', { rootSegment, isAuthenticated });
+      console.log('[RootLayoutNav] redirect -> /auth', { rootSegment, isAuthenticated });
       hasNavigated.current = true;
       setTimeout(() => {
-        if (isWeb) {
-          // Редирект в рамках приложения: остаёмся под /app/auth, иначе уходим на spynetwork.ru/auth
-          window.location.pathname = '/app/auth';
-        } else {
-          router.replace('/auth');
-        }
+        router.replace('/auth');
       }, 0);
       return;
     }
