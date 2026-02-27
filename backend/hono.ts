@@ -120,15 +120,16 @@ app.use("/_expo/*", serveStatic({ root: "dist" }));
 app.use("/assets/*", serveStatic({ root: "dist" }));
 app.get("/favicon.ico", serveStatic({ root: "dist", path: "/favicon.ico" }));
 
-// Скрипт-шим: убирает /app из pathname до старта React (чтобы Expo Router нашёл роут),
-// затем патчит history API чтобы /app-префикс возвращался при каждой навигации.
+// Скрипт-шим: убирает /app из pathname до старта React (Expo Router найдёт роут),
+// патчит history API чтобы /app-префикс возвращался при любой навигации,
+// и восстанавливает /app после полной загрузки страницы (когда React не делает replaceState).
 const BASE_PATH_SHIM = `<script>(function(){
   var B='/app';
   var _pu=history.pushState.bind(history);
   var _re=history.replaceState.bind(history);
   var p=location.pathname;
   if(p===B||p.startsWith(B+'/')){
-    _re(null,'', (p.slice(B.length)||'/') + location.search + location.hash);
+    _re(null,'',(p.slice(B.length)||'/')+location.search+location.hash);
   }
   function ab(u){
     if(!u||typeof u!=='string')return u;
@@ -137,7 +138,24 @@ const BASE_PATH_SHIM = `<script>(function(){
   }
   history.pushState=function(s,t,u){_pu(s,t,ab(u));};
   history.replaceState=function(s,t,u){_re(s,t,ab(u));};
+  window.addEventListener('load',function(){
+    if(!location.pathname.startsWith(B)){
+      var cp=location.pathname;
+      _re(history.state||null,'',B+(cp==='/'?'':cp)+location.search+location.hash);
+    }
+  });
 })()</script>`;
+
+// ВАЖНО: статика /app/_expo/* и /app/assets/* — ДО catch-all /app/*,
+// иначе app.get("/app/*") перехватывал бы JS-бандлы и отдавал HTML вместо JS.
+app.use(
+  "/app/_expo/*",
+  serveStatic({ root: "dist", rewriteRequestPath: (path) => path.replace(/^\/app/, "") }),
+);
+app.use(
+  "/app/assets/*",
+  serveStatic({ root: "dist", rewriteRequestPath: (path) => path.replace(/^\/app/, "") }),
+);
 
 // SPA: /app и /app/* — всегда index.html со встроенным шимом базового пути
 app.get("/app", async (c) => {
@@ -160,16 +178,6 @@ app.get("/app/*", async (c) => {
     return c.text("App not built. Run: npx expo export --platform web", 404);
   }
 });
-
-// Статика приложения под /app (бандлы Expo под /app/_expo, /app/assets — если в dist так)
-app.use(
-  "/app/_expo/*",
-  serveStatic({ root: "dist", rewriteRequestPath: (path) => path.replace(/^\/app/, "") }),
-);
-app.use(
-  "/app/assets/*",
-  serveStatic({ root: "dist", rewriteRequestPath: (path) => path.replace(/^\/app/, "") }),
-);
 
 // Статика из web/: главная, страницы, форма админки (admin.html)
 app.use(
