@@ -195,9 +195,10 @@ export const phoneAuthRouter = createTRPCRouter({
         };
       }
 
-      // Верифицирован! Создаём сессию.
+      // Верифицирован! Создаём сессию и демо-данные если нужно.
       await storeDelete(pendingKey(phone));
       const session = await createUserSession(phone);
+      await ensureTestData(phone);
 
       return {
         ok: true as const,
@@ -234,14 +235,15 @@ export const phoneAuthRouter = createTRPCRouter({
 });
 
 /**
- * Генерация демо-данных для тестового аккаунта.
+ * Генерация демо-данных для нового пользователя.
+ * Вызывается для всех новых пользователей при первой авторизации.
  */
 async function ensureTestData(phone: string) {
   const dataKey = `user:${phone}:data`;
   const existing = await storeGet(dataKey);
   if (existing) return; // данные уже есть
 
-  console.log("[phone-auth] generating demo data for test account");
+  console.log("[phone-auth] generating demo data for new user", phone);
 
   const now = Date.now();
   const day = 86400000;
@@ -263,14 +265,20 @@ async function ensureTestData(phone: string) {
         sectors: ["business"],
         functionalCircle: "productivity" as const,
         importance: "critical" as const,
-        relations: [{ contactId: "demo-2", strength: 85, description: "Деловые партнёры" }],
+        relations: [
+          { contactId: "demo-2", strength: 85 },
+          { contactId: "demo-3", strength: 60 },
+          { contactId: "demo-4", strength: 50 },
+          { contactId: "demo-5", strength: 40 },
+        ],
         diary: [
           { id: "d1", date: new Date(now - 3 * day), type: "manual" as const, content: "Встреча в офисе. Обсудили условия контракта на Q2." },
           { id: "d2", date: new Date(now - 10 * day), type: "manual" as const, content: "Звонок. Договорились о встрече на следующей неделе." },
+          { id: "d1a", date: new Date(now - 2 * day), type: "manual" as const, content: "1. Что сделать для развития отношений?\nПлан:\nРезультат:\n\n2. Как узнать о человеке больше\nПлан:\nРезультат:\n\n3. Что я могу дать?\nПлан:\nРезультат:\n\n4. Что попросить?\nПлан:\nРезультат:\n\n5. Как обеспечить следующую встречу?\nПлан:\nРезультат:" },
         ],
         addedDate: new Date(now - 30 * day),
-        lastInteraction: new Date(now - 3 * day),
-        powerGrouping: { groupName: "Альфа Групп", suzerainId: undefined, vassalIds: ["demo-2", "demo-3"] },
+        lastInteraction: new Date(now - 2 * day),
+        powerGrouping: { groupName: "Альфа Групп", vassalIds: ["demo-2", "demo-3", "demo-4"] },
       },
       {
         contact: {
@@ -284,14 +292,16 @@ async function ensureTestData(phone: string) {
           notes: "Отвечает за финансовые решения. Аналитический склад ума.",
         },
         sectors: ["business"],
-        functionalCircle: "productivity" as const,
+        functionalCircle: "development" as const,
         importance: "high" as const,
-        relations: [{ contactId: "demo-1", strength: 85, description: "Работает с Ивановым" }],
+        relations: [{ contactId: "demo-1", strength: 85 }],
         diary: [
           { id: "d3", date: new Date(now - 5 * day), type: "manual" as const, content: "Отправлены финансовые документы на согласование." },
+          { id: "d3a", date: new Date(now - 4 * day), type: "manual" as const, content: "1. Что сделать для развития отношений?\nПлан:\nРезультат:\n\n2. Как узнать о человеке больше\nПлан:\nРезультат:\n\n3. Что я могу дать?\nПлан:\nРезультат:\n\n4. Что попросить?\nПлан:\nРезультат:\n\n5. Как обеспечить следующую встречу?\nПлан:\nРезультат:" },
         ],
         addedDate: new Date(now - 25 * day),
-        lastInteraction: new Date(now - 5 * day),
+        lastInteraction: new Date(now - 4 * day),
+        powerGrouping: { groupName: "Альфа Групп", suzerainId: "demo-1", vassalIds: [] },
       },
       {
         contact: {
@@ -308,14 +318,15 @@ async function ensureTestData(phone: string) {
         functionalCircle: "development" as const,
         importance: "high" as const,
         relations: [
-          { contactId: "demo-1", strength: 60, description: "Знакомы через конференцию" },
-          { contactId: "demo-4", strength: 75, description: "Коллеги" },
+          { contactId: "demo-1", strength: 60 },
+          { contactId: "demo-6", strength: 75 },
         ],
         diary: [
           { id: "d4", date: new Date(now - 7 * day), type: "manual" as const, content: "Созвон по API интеграции. Получили документацию." },
         ],
         addedDate: new Date(now - 20 * day),
         lastInteraction: new Date(now - 7 * day),
+        powerGrouping: { groupName: "Альфа Групп", suzerainId: "demo-1", vassalIds: [] },
       },
       {
         contact: {
@@ -331,12 +342,13 @@ async function ensureTestData(phone: string) {
         sectors: ["personal", "other"],
         functionalCircle: "support" as const,
         importance: "medium" as const,
-        relations: [],
+        relations: [{ contactId: "demo-1", strength: 50 }],
         diary: [
           { id: "d5", date: new Date(now - 14 * day), type: "manual" as const, content: "Обсудили медиаплан на весну." },
         ],
         addedDate: new Date(now - 15 * day),
         lastInteraction: new Date(now - 14 * day),
+        powerGrouping: { groupName: "Альфа Групп", suzerainId: "demo-1", vassalIds: [] },
       },
       {
         contact: {
@@ -352,9 +364,75 @@ async function ensureTestData(phone: string) {
         sectors: ["business"],
         functionalCircle: "support" as const,
         importance: "medium" as const,
-        relations: [{ contactId: "demo-1", strength: 40, description: "Юрист Иванова" }],
+        relations: [{ contactId: "demo-1", strength: 40 }],
         diary: [],
         addedDate: new Date(now - 10 * day),
+      },
+      {
+        contact: {
+          id: "demo-6",
+          name: "Кашин Дмитрий Владимирович",
+          phoneNumbers: ["+7 999 123-45-67"],
+          emails: ["kashin@classified.net"],
+          company: "Classified Corp",
+          position: "Senior Operative",
+          goal: "Выход на первого лица",
+          notes: "Связующее звено между командами. Хорошо ориентируется в структурах.",
+        },
+        sectors: ["politics"],
+        functionalCircle: "development" as const,
+        importance: "medium" as const,
+        relations: [{ contactId: "demo-3", strength: 75 }],
+        diary: [
+          { id: "d6", date: new Date(now - 8 * day), type: "manual" as const, content: "Первый контакт. Договорились о повторной встрече через неделю." },
+        ],
+        addedDate: new Date(now - 8 * day),
+        lastInteraction: new Date(now - 8 * day),
+      },
+      {
+        contact: {
+          id: "demo-7",
+          name: "Смирнов Олег Анатольевич",
+          phoneNumbers: ["+7 915 321-00-44"],
+          emails: ["smirnov@corp.ru"],
+          company: "Classified Corp",
+          position: "Senior",
+          goal: "Стратегическая поддержка",
+          notes: "Опытный переговорщик. Ценный контакт в сложных ситуациях.",
+        },
+        sectors: ["other"],
+        functionalCircle: "development" as const,
+        importance: "critical" as const,
+        relations: [{ contactId: "demo-1", strength: 70 }],
+        diary: [
+          { id: "d7", date: new Date(now - 6 * day), type: "manual" as const, content: "Встреча в нейтральном месте. Обсудили стратегию на квартал." },
+        ],
+        addedDate: new Date(now - 12 * day),
+        lastInteraction: new Date(now - 6 * day),
+      },
+      {
+        contact: {
+          id: "demo-8",
+          name: "Терентьев Павел Игоревич",
+          phoneNumbers: ["+7 965 444-33-22"],
+          emails: ["terentiev@invest.ru"],
+          company: "InvestGroup",
+          position: "Директор по инвестициям",
+          goal: "Привлечение финансирования",
+          notes: "Принимает решения о вложениях. Ценит конкретику и цифры.",
+        },
+        sectors: ["business"],
+        functionalCircle: "productivity" as const,
+        importance: "high" as const,
+        relations: [
+          { contactId: "demo-1", strength: 55 },
+          { contactId: "demo-2", strength: 45 },
+        ],
+        diary: [
+          { id: "d8", date: new Date(now - 9 * day), type: "manual" as const, content: "Презентация проекта. Получили положительный отклик." },
+        ],
+        addedDate: new Date(now - 18 * day),
+        lastInteraction: new Date(now - 9 * day),
       },
     ],
     sectors: ["work", "business", "politics", "personal", "other"],
@@ -363,7 +441,7 @@ async function ensureTestData(phone: string) {
   };
 
   await storeSet(dataKey, demoData);
-  console.log("[phone-auth] demo data created: 5 contacts");
+  console.log("[phone-auth] demo data created: 8 contacts for", phone);
 }
 
 /**
