@@ -160,4 +160,25 @@ export const qrAuthRouter = createTRPCRouter({
 
       return { ok: true as const };
     }),
+
+  /**
+   * Разработческий вход по секретному ключу.
+   * URL: /app/auth?dev=<DEV_SECRET>
+   * Номер: +71111111111
+   */
+  devLogin: publicProcedure
+    .input(z.object({ secret: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const expected = process.env.DEV_SECRET || "spy-dev-2026";
+      if (input.secret !== expected) {
+        console.warn("[qr-auth] devLogin: invalid secret attempt");
+        return { ok: false as const, error: "FORBIDDEN" as const };
+      }
+
+      const devPhone = "71111111111";
+      const session = await createUserSession(devPhone);
+      console.log("[qr-auth] devLogin: dev session created", { phone: devPhone });
+
+      return { ok: true as const, phone: devPhone, token: session.token };
+    }),
 });

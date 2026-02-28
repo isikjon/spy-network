@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 
-type AuthStep = 'loading' | 'qr' | 'waiting' | 'done' | 'error';
+type AuthStep = 'loading' | 'qr' | 'waiting' | 'done' | 'error' | 'dev';
 
 const BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://spynetwork.ru';
 
@@ -29,6 +29,7 @@ export default function WebAuthScreen() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const createSessionMutation = trpc.qrAuth.createSession.useMutation();
+  const devLoginMutation = trpc.qrAuth.devLogin.useMutation();
   const utils = trpc.useUtils();
   const styles = createStyles(theme);
 
@@ -121,6 +122,37 @@ export default function WebAuthScreen() {
 
   useEffect(() => {
     activeRef.current = true;
+
+    // Проверяем dev-параметр в URL: /app/auth?dev=SECRET
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const devSecret = params.get('dev');
+      if (devSecret) {
+        setStep('dev');
+        devLoginMutation.mutateAsync({ secret: devSecret }).then(async (result) => {
+          if (!activeRef.current) return;
+          if (result.ok) {
+            setStep('done');
+            try {
+              await loginWithToken(result.phone, result.token);
+              setTimeout(() => router.replace('/(tabs)/profile'), 600);
+            } catch {
+              setStep('error');
+              setErrorMsg('Ошибка сохранения dev-сессии');
+            }
+          } else {
+            setStep('error');
+            setErrorMsg('Неверный ключ разработчика');
+          }
+        }).catch(() => {
+          if (!activeRef.current) return;
+          setStep('error');
+          setErrorMsg('Ошибка dev-входа');
+        });
+        return () => { activeRef.current = false; };
+      }
+    }
+
     createSession();
     return () => {
       activeRef.current = false;
@@ -146,6 +178,14 @@ export default function WebAuthScreen() {
 
           {/* Content */}
           <View style={styles.form}>
+
+            {/* Dev login */}
+            {step === 'dev' && (
+              <View style={styles.centered}>
+                <ActivityIndicator color={theme.primary} size="large" />
+                <Text style={styles.hintText}>DEV ACCESS...</Text>
+              </View>
+            )}
 
             {/* Loading */}
             {step === 'loading' && (
