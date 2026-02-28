@@ -1,6 +1,7 @@
 import { useApp } from '@/contexts/AppContext';
+import { trpc } from '@/utils/trpc';
 import { Redirect, router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor, Loader } from 'lucide-react-native';
 
 import Tutorial from '@/components/Tutorial';
 import {
@@ -33,6 +34,31 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
   const [editedSectorName, setEditedSectorName] = useState('');
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  const createPaymentMutation = trpc.payment.createPayment.useMutation();
+
+  const handleSubscribe = async () => {
+    setPaymentLoading(true);
+    setPaymentError(null);
+    try {
+      const result = await createPaymentMutation.mutateAsync();
+      if (result.ok && result.paymentUrl) {
+        if (Platform.OS === 'web') {
+          window.open(result.paymentUrl, '_blank');
+        } else {
+          Linking.openURL(result.paymentUrl);
+        }
+      } else {
+        setPaymentError('Ошибка создания платежа. Попробуйте позже.');
+      }
+    } catch {
+      setPaymentError('Ошибка соединения. Попробуйте позже.');
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
 
   const shouldRedirectToSplitView = Platform.OS === 'web' && !embedded;
 
@@ -318,13 +344,23 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                   </View>
 
                   {subscriptionLevel === 'basic' ? (
-                    <TouchableOpacity
-                      style={styles.subscribeButton}
-                      onPress={() => changeSubscription('working')}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.subscribeButtonText}>{t.profile.subscriptionActivate}</Text>
-                    </TouchableOpacity>
+                    <>
+                      {paymentError && (
+                        <Text style={{ color: theme.danger, fontFamily: 'monospace', fontSize: 11, marginBottom: 8, textAlign: 'center' }}>
+                          {paymentError}
+                        </Text>
+                      )}
+                      <TouchableOpacity
+                        style={[styles.subscribeButton, paymentLoading && { opacity: 0.6 }]}
+                        onPress={handleSubscribe}
+                        activeOpacity={0.7}
+                        disabled={paymentLoading}
+                      >
+                        <Text style={styles.subscribeButtonText}>
+                          {paymentLoading ? 'ЗАГРУЗКА...' : t.profile.subscriptionActivate}
+                        </Text>
+                      </TouchableOpacity>
+                    </>
                   ) : (
                     <TouchableOpacity
                       style={styles.cancelSubscriptionButton}
