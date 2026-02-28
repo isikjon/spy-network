@@ -262,7 +262,15 @@ export const [AppProvider, useApp] = createContextHook(() => {
       console.log('[AppContext] hydrate from server', {
         dossiers: Array.isArray(data?.dossiers) ? data.dossiers.length : -1,
         updatedAt: data?.updatedAt,
+        level: data?.level,
       });
+
+      // Синхронизируем уровень подписки с сервером
+      if (typeof data?.level === 'number') {
+        const serverLevel: SubscriptionLevel = data.level >= 2 ? 'working' : 'basic';
+        setSubscriptionLevel(serverLevel);
+        saveSubscription(serverLevel);
+      }
 
       applyAppData({
         dossiers: parseDossiersWithDates(data?.dossiers),
