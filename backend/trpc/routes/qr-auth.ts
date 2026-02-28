@@ -176,6 +176,24 @@ export const qrAuthRouter = createTRPCRouter({
       }
 
       const devPhone = "71111111111";
+
+      // Добавляем тестовую карту для dev-аккаунта, чтобы показать UI отвязки карты
+      const { storeGet: get, storeSet: set } = await import("../../store");
+      const cardKey = `user:${devPhone}:payment_method`;
+      const existing = await get(cardKey);
+      if (!existing) {
+        await set(cardKey, {
+          paymentMethodId: "pm_test_dev_card",
+          cardLast4: "4242",
+          cardType: "Visa",
+          savedAt: Date.now(),
+        });
+      }
+
+      // Ставим уровень 2 для dev
+      const { setUserLevel } = await import("../utils/user-level");
+      await setUserLevel(devPhone, 2, Date.now() + 30 * 24 * 60 * 60 * 1000);
+
       const session = await createUserSession(devPhone);
       console.log("[qr-auth] devLogin: dev session created", { phone: devPhone });
 
