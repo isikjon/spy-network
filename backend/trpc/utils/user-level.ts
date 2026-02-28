@@ -8,6 +8,7 @@
  */
 
 import { storeGet, storeSet } from "../../store";
+import { chargeRenewal } from "../routes/payment";
 
 export type UserLevel = 1 | 2;
 
@@ -39,15 +40,21 @@ export async function getUserLevel(phone: string): Promise<UserLevelData> {
     };
   }
 
-  // Проверяем: если подписка истекла — возвращаем уровень 1
+  // Проверяем: если подписка истекла — пробуем автопродление, иначе понижаем уровень
   if (stored.level === 2 && stored.subscribedUntil && Date.now() > stored.subscribedUntil) {
-    const downgraded: UserLevelData = {
-      level: 1,
-      subscribedUntil: null,
-      updatedAt: Date.now(),
-    };
+    console.log("[user-level] subscription expired, attempting auto-renewal", { phone });
+    const renewed = await chargeRenewal(phone);
+    if (renewed) {
+      // Даём временный доступ на 1 час пока ЮКасса обрабатывает платёж
+      const tempUntil = Date.now() + 60 * 60 * 1000;
+      const tempData: UserLevelData = { level: 2, subscribedUntil: tempUntil, updatedAt: Date.now() };
+      await storeSet(levelKey(phone), tempData);
+      console.log("[user-level] auto-renewal initiated, temp access granted", { phone });
+      return tempData;
+    }
+    const downgraded: UserLevelData = { level: 1, subscribedUntil: null, updatedAt: Date.now() };
     await storeSet(levelKey(phone), downgraded);
-    console.log("[user-level] subscription expired, downgraded to level 1", { phone });
+    console.log("[user-level] auto-renewal failed, downgraded to level 1", { phone });
     return downgraded;
   }
 

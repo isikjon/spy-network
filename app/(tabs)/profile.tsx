@@ -36,8 +36,11 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
   const [showTutorial, setShowTutorial] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [cardDeleteLoading, setCardDeleteLoading] = useState(false);
 
   const createPaymentMutation = trpc.payment.createPayment.useMutation();
+  const deleteCardMutation = trpc.payment.deleteCard.useMutation();
+  const cardInfoQuery = trpc.payment.getCardInfo.useQuery(undefined, { enabled: !!phoneNumber });
 
   const handleSubscribe = async () => {
     setPaymentLoading(true);
@@ -58,6 +61,31 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
     } finally {
       setPaymentLoading(false);
     }
+  };
+
+  const handleDeleteCard = () => {
+    Alert.alert(
+      'Отвязать карту',
+      'После отвязки карты автоматическое продление подписки будет отключено. Продолжить?',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Отвязать',
+          style: 'destructive',
+          onPress: async () => {
+            setCardDeleteLoading(true);
+            try {
+              await deleteCardMutation.mutateAsync();
+              cardInfoQuery.refetch();
+            } catch {
+              Alert.alert('Ошибка', 'Не удалось отвязать карту. Попробуйте позже.');
+            } finally {
+              setCardDeleteLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const shouldRedirectToSplitView = Platform.OS === 'web' && !embedded;
@@ -362,26 +390,53 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                       </TouchableOpacity>
                     </>
                   ) : (
-                    <TouchableOpacity
-                      style={styles.cancelSubscriptionButton}
-                      onPress={() => {
-                        Alert.alert(
-                          t.profile.subscriptionCancelConfirmTitle,
-                          t.profile.subscriptionCancelConfirmMessage,
-                          [
-                            { text: t.profile.cancel, style: 'cancel' },
-                            {
-                              text: t.profile.subscriptionConfirm,
-                              style: 'destructive',
-                              onPress: () => changeSubscription('basic'),
-                            },
-                          ]
-                        );
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.cancelSubscriptionText}>{t.profile.subscriptionCancel}</Text>
-                    </TouchableOpacity>
+                    <>
+                      {cardInfoQuery.data?.ok && cardInfoQuery.data.card && (
+                        <View style={styles.savedCardBlock}>
+                          <Text style={styles.savedCardLabel}>КАРТА ДЛЯ АВТОПРОДЛЕНИЯ</Text>
+                          <View style={styles.savedCardRow}>
+                            <Text style={styles.savedCardNumber}>
+                              {cardInfoQuery.data.card.cardType} •••• {cardInfoQuery.data.card.cardLast4}
+                            </Text>
+                            <TouchableOpacity
+                              onPress={handleDeleteCard}
+                              disabled={cardDeleteLoading}
+                              activeOpacity={0.7}
+                              style={styles.deleteCardButton}
+                            >
+                              <Text style={styles.deleteCardText}>
+                                {cardDeleteLoading ? '...' : 'ОТВЯЗАТЬ'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                          {cardInfoQuery.data.subscribedUntil && (
+                            <Text style={styles.nextBillingText}>
+                              {'СЛЕДУЮЩЕЕ СПИСАНИЕ: ' + new Date(cardInfoQuery.data.subscribedUntil).toLocaleDateString('ru-RU')}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                      <TouchableOpacity
+                        style={styles.cancelSubscriptionButton}
+                        onPress={() => {
+                          Alert.alert(
+                            t.profile.subscriptionCancelConfirmTitle,
+                            t.profile.subscriptionCancelConfirmMessage,
+                            [
+                              { text: t.profile.cancel, style: 'cancel' },
+                              {
+                                text: t.profile.subscriptionConfirm,
+                                style: 'destructive',
+                                onPress: () => changeSubscription('basic'),
+                              },
+                            ]
+                          );
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.cancelSubscriptionText}>{t.profile.subscriptionCancel}</Text>
+                      </TouchableOpacity>
+                    </>
                   )}
                 </View>
               </View>
@@ -1300,6 +1355,52 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontFamily: 'monospace' as const,
     letterSpacing: 1,
     fontWeight: '700' as const,
+  },
+  savedCardBlock: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+    padding: 12,
+    marginBottom: 10,
+  },
+  savedCardLabel: {
+    fontSize: 9,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  savedCardRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  savedCardNumber: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: theme.text,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  deleteCardButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: theme.danger,
+  },
+  deleteCardText: {
+    fontSize: 9,
+    color: theme.danger,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+    fontWeight: '700' as const,
+  },
+  nextBillingText: {
+    fontSize: 9,
+    color: theme.primaryDim,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+    marginTop: 6,
   },
   clearanceInline: {
     width: '100%',

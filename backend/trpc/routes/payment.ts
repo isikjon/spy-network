@@ -1,22 +1,20 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { storeGet, storeSet } from "../../store";
-import { setUserLevel } from "../utils/user-level";
+import { storeGet, storeSet, storeDelete } from "../../store";
+import { setUserLevel, getUserLevel } from "../utils/user-level";
 
 /**
- * Оплата подписки через YooKassa (ЮКасса).
+ * Оплата подписки через YooKassa с поддержкой автопродления.
  *
- * Флоу:
- * 1. Клиент вызывает createPayment
- * 2. Бэкенд создаёт платёж в YooKassa → возвращает URL редиректа
- * 3. Пользователь оплачивает на сайте YooKassa
- * 4. YooKassa шлёт webhook → бэкенд обновляет уровень пользователя
- * 5. Клиент поллит checkPayment → видит статус "succeeded" → показывает успех
+ * Флоу первой оплаты:
+ * 1. createPayment → получаем URL редиректа + save_payment_method: true
+ * 2. Пользователь платит → YooKassa сохраняет карту
+ * 3. Webhook payment.succeeded → сохраняем payment_method.id + повышаем уровень
  *
- * Env vars:
- *   YOOKASSA_SHOP_ID   — ID магазина
- *   YOOKASSA_SECRET_KEY — секретный ключ
- *   APP_BASE_URL        — базовый URL приложения (https://spynetwork.ru)
+ * Автопродление (каждые 7 дней):
+ * 4. getUserLevel видит истечение → вызывает chargeRenewal
+ * 5. chargeRenewal делает серверный платёж без редиректа
+ * 6. Webhook → снова повышаем уровень на 7 дней
  *
  * Цена: 99 руб / 7 дней
  */
@@ -29,10 +27,22 @@ type PendingPayment = {
   phone: string;
   status: "pending" | "succeeded" | "canceled";
   createdAt: number;
+  isRenewal?: boolean;
+};
+
+export type SavedCard = {
+  paymentMethodId: string;
+  cardLast4: string;
+  cardType: string;
+  savedAt: number;
 };
 
 function paymentKey(paymentId: string): string {
   return `payment:${paymentId}`;
+}
+
+function cardKey(phone: string): string {
+  return `user:${phone}:payment_method`;
 }
 
 function getYooKassaCredentials(): { shopId: string; secretKey: string } | null {
@@ -46,8 +56,17 @@ function getBaseUrl(): string {
   return (process.env.APP_BASE_URL || "https://spynetwork.ru").replace(/\/$/, "");
 }
 
+function yooKassaHeaders(shopId: string, secretKey: string, idempotenceKey: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Basic ${Buffer.from(`${shopId}:${secretKey}`).toString("base64")}`,
+    "Idempotence-Key": idempotenceKey,
+  };
+}
+
 /**
- * Создать платёж в YooKassa REST API.
+ * Первый платёж — с редиректом на страницу оплаты.
+ * save_payment_method: true → ЮКасса сохраняет карту для последующих списаний.
  */
 async function createYooKassaPayment(
   phone: string,
@@ -56,15 +75,10 @@ async function createYooKassaPayment(
   returnUrl: string,
 ): Promise<{ ok: true; paymentId: string; confirmationUrl: string } | { ok: false; error: string }> {
   const idempotenceKey = `pay_${phone}_${Date.now()}`;
-
   try {
     const res = await fetch("https://api.yookassa.ru/v3/payments", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Basic ${Buffer.from(`${shopId}:${secretKey}`).toString("base64")}`,
-        "Idempotence-Key": idempotenceKey,
-      },
+      headers: yooKassaHeaders(shopId, secretKey, idempotenceKey),
       body: JSON.stringify({
         amount: { value: PRICE_RUB, currency: "RUB" },
         payment_method_data: { type: "bank_card" },
@@ -72,6 +86,7 @@ async function createYooKassaPayment(
         description: `Spy Network ДОПУСК 2 (7 дней) — ${phone}`,
         metadata: { phone },
         capture: true,
+        save_payment_method: true,
         receipt: {
           customer: { phone },
           items: [
@@ -87,23 +102,91 @@ async function createYooKassaPayment(
         },
       }),
     });
-
     const data = (await res.json()) as any;
-
     if (!res.ok) {
       console.error("[payment] YooKassa error", data);
       return { ok: false, error: data?.description || "API_ERROR" };
     }
-
     const confirmationUrl = data?.confirmation?.confirmation_url;
-    if (!confirmationUrl) {
-      return { ok: false, error: "NO_CONFIRMATION_URL" };
-    }
-
+    if (!confirmationUrl) return { ok: false, error: "NO_CONFIRMATION_URL" };
     return { ok: true, paymentId: data.id, confirmationUrl };
   } catch (e: any) {
     console.error("[payment] fetch error", e);
     return { ok: false, error: e?.message || "NETWORK_ERROR" };
+  }
+}
+
+/**
+ * Автоматическое списание по сохранённой карте (без редиректа).
+ */
+export async function chargeRenewal(phone: string): Promise<boolean> {
+  const creds = getYooKassaCredentials();
+  if (!creds) {
+    console.warn("[payment] chargeRenewal: YooKassa not configured");
+    return false;
+  }
+
+  const card = await storeGet<SavedCard>(cardKey(phone));
+  if (!card?.paymentMethodId) {
+    console.log("[payment] chargeRenewal: no saved card for", phone);
+    return false;
+  }
+
+  const idempotenceKey = `renew_${phone}_${Date.now()}`;
+  try {
+    const res = await fetch("https://api.yookassa.ru/v3/payments", {
+      method: "POST",
+      headers: yooKassaHeaders(creds.shopId, creds.secretKey, idempotenceKey),
+      body: JSON.stringify({
+        amount: { value: PRICE_RUB, currency: "RUB" },
+        payment_method_id: card.paymentMethodId,
+        capture: true,
+        description: `Spy Network ДОПУСК 2 — автопродление (7 дней) — ${phone}`,
+        metadata: { phone, isRenewal: "true" },
+        receipt: {
+          customer: { phone },
+          items: [
+            {
+              description: "Автопродление Spy Network — Допуск уровня 2 (7 дней)",
+              quantity: "1.00",
+              amount: { value: PRICE_RUB, currency: "RUB" },
+              vat_code: 1,
+              payment_subject: "service",
+              payment_mode: "full_payment",
+            },
+          ],
+        },
+      }),
+    });
+
+    const data = (await res.json()) as any;
+    if (!res.ok) {
+      console.error("[payment] chargeRenewal YooKassa error", { phone, error: data });
+      return false;
+    }
+
+    const paymentId = data.id as string;
+    await storeSet(paymentKey(paymentId), {
+      paymentId,
+      phone,
+      status: "pending",
+      createdAt: Date.now(),
+      isRenewal: true,
+    } as PendingPayment);
+
+    console.log("[payment] chargeRenewal initiated", { phone, paymentId, status: data.status });
+
+    // Если ЮКасса сразу вернула succeeded (бывает при автоплатежах)
+    if (data.status === "succeeded") {
+      const subscribedUntil = Date.now() + SUBSCRIPTION_DAYS * 24 * 60 * 60 * 1000;
+      await setUserLevel(phone, 2, subscribedUntil);
+      console.log("[payment] chargeRenewal: instant success", { phone });
+    }
+
+    return true;
+  } catch (e: any) {
+    console.error("[payment] chargeRenewal fetch error", e);
+    return false;
   }
 }
 
@@ -118,25 +201,23 @@ export const paymentRouter = createTRPCRouter({
 
     const creds = getYooKassaCredentials();
     if (!creds) {
-      console.warn("[payment] YooKassa not configured (YOOKASSA_SHOP_ID / YOOKASSA_SECRET_KEY missing)");
+      console.warn("[payment] YooKassa not configured");
       return { ok: false as const, error: "NOT_CONFIGURED" as const };
     }
 
-    const returnUrl = `${getBaseUrl()}/payment/success`;
+    const returnUrl = `${getBaseUrl()}/app/payment-success`;
     const result = await createYooKassaPayment(ctx.userPhone, creds.shopId, creds.secretKey, returnUrl);
 
     if (!result.ok) {
-      const errResult = result as { ok: false; error: string };
-      return { ok: false as const, error: errResult.error };
+      return { ok: false as const, error: (result as { ok: false; error: string }).error };
     }
 
-    const pending: PendingPayment = {
+    await storeSet(paymentKey(result.paymentId), {
       paymentId: result.paymentId,
       phone: ctx.userPhone,
       status: "pending",
       createdAt: Date.now(),
-    };
-    await storeSet(paymentKey(result.paymentId), pending);
+    } as PendingPayment);
 
     console.log("[payment] created", { phone: ctx.userPhone, paymentId: result.paymentId });
 
@@ -156,20 +237,44 @@ export const paymentRouter = createTRPCRouter({
       if (!ctx.userPhone) {
         return { ok: false as const, error: "UNAUTHENTICATED" as const };
       }
-
       const record = await storeGet<PendingPayment>(paymentKey(input.paymentId));
-
       if (!record || record.phone !== ctx.userPhone) {
         return { ok: false as const, error: "NOT_FOUND" as const };
       }
-
       return { ok: true as const, status: record.status };
     }),
+
+  /**
+   * Получить информацию о сохранённой карте.
+   */
+  getCardInfo: publicProcedure.query(async ({ ctx }) => {
+    if (!ctx.userPhone) {
+      return { ok: false as const, error: "UNAUTHENTICATED" as const };
+    }
+    const card = await storeGet<SavedCard>(cardKey(ctx.userPhone));
+    const levelData = await getUserLevel(ctx.userPhone);
+    return {
+      ok: true as const,
+      card: card ?? null,
+      subscribedUntil: levelData.subscribedUntil,
+    };
+  }),
+
+  /**
+   * Отвязать карту (удалить сохранённый payment method).
+   */
+  deleteCard: publicProcedure.mutation(async ({ ctx }) => {
+    if (!ctx.userPhone) {
+      return { ok: false as const, error: "UNAUTHENTICATED" as const };
+    }
+    await storeDelete(cardKey(ctx.userPhone));
+    console.log("[payment] card deleted for", ctx.userPhone);
+    return { ok: true as const };
+  }),
 });
 
 /**
  * Обработка webhook от YooKassa.
- * Вызывается из hono.ts: POST /payment/webhook/yookassa
  */
 export async function handleYooKassaWebhook(body: Record<string, unknown>): Promise<boolean> {
   console.log("[payment] webhook received", JSON.stringify(body, null, 2));
@@ -183,31 +288,51 @@ export async function handleYooKassaWebhook(body: Record<string, unknown>): Prom
   }
 
   const paymentId = paymentObj.id as string;
-  const record = await storeGet<PendingPayment>(paymentKey(paymentId));
-
-  if (!record) {
-    console.warn("[payment] webhook: unknown paymentId", paymentId);
-    return false;
-  }
+  const phone = paymentObj?.metadata?.phone as string;
 
   if (event === "payment.succeeded") {
-    record.status = "succeeded";
-    await storeSet(paymentKey(paymentId), record);
+    // Повышаем уровень пользователя
+    if (phone) {
+      const subscribedUntil = Date.now() + SUBSCRIPTION_DAYS * 24 * 60 * 60 * 1000;
+      await setUserLevel(phone, 2, subscribedUntil);
+      console.log("[payment] webhook: upgraded to level 2", {
+        phone,
+        subscribedUntil: new Date(subscribedUntil).toISOString(),
+      });
 
-    // Повышаем уровень пользователя на 7 дней
-    const subscribedUntil = Date.now() + SUBSCRIPTION_DAYS * 24 * 60 * 60 * 1000;
-    await setUserLevel(record.phone, 2, subscribedUntil);
+      // Сохраняем данные карты для автопродления
+      const pmId = paymentObj?.payment_method?.id as string | undefined;
+      const pmSaved = paymentObj?.payment_method?.saved as boolean | undefined;
+      const cardLast4 = paymentObj?.payment_method?.card?.last4 as string | undefined;
+      const cardType = paymentObj?.payment_method?.card?.card_type as string | undefined;
 
-    console.log("[payment] webhook: succeeded, upgraded to level 2", {
-      phone: record.phone,
-      subscribedUntil: new Date(subscribedUntil).toISOString(),
-    });
+      if (pmId && pmSaved) {
+        const cardData: SavedCard = {
+          paymentMethodId: pmId,
+          cardLast4: cardLast4 ?? "****",
+          cardType: cardType ?? "Unknown",
+          savedAt: Date.now(),
+        };
+        await storeSet(`user:${phone}:payment_method`, cardData);
+        console.log("[payment] webhook: card saved", { phone, cardLast4, pmId });
+      }
+    }
+
+    // Обновляем запись платежа
+    const record = await storeGet<PendingPayment>(paymentKey(paymentId));
+    if (record) {
+      record.status = "succeeded";
+      await storeSet(paymentKey(paymentId), record);
+    }
     return true;
   }
 
   if (event === "payment.canceled") {
-    record.status = "canceled";
-    await storeSet(paymentKey(paymentId), record);
+    const record = await storeGet<PendingPayment>(paymentKey(paymentId));
+    if (record) {
+      record.status = "canceled";
+      await storeSet(paymentKey(paymentId), record);
+    }
     console.log("[payment] webhook: canceled", { paymentId });
     return true;
   }
