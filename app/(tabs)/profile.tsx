@@ -390,53 +390,53 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                       </TouchableOpacity>
                     </>
                   ) : (
-                    <>
-                      {cardInfoQuery.data?.ok && cardInfoQuery.data.card && (
-                        <View style={styles.savedCardBlock}>
-                          <Text style={styles.savedCardLabel}>КАРТА ДЛЯ АВТОПРОДЛЕНИЯ</Text>
-                          <View style={styles.savedCardRow}>
-                            <Text style={styles.savedCardNumber}>
-                              {cardInfoQuery.data.card.cardType} •••• {cardInfoQuery.data.card.cardLast4}
-                            </Text>
-                            <TouchableOpacity
-                              onPress={handleDeleteCard}
-                              disabled={cardDeleteLoading}
-                              activeOpacity={0.7}
-                              style={styles.deleteCardButton}
-                            >
-                              <Text style={styles.deleteCardText}>
-                                {cardDeleteLoading ? '...' : 'ОТВЯЗАТЬ'}
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                          {cardInfoQuery.data.subscribedUntil && (
-                            <Text style={styles.nextBillingText}>
-                              {'СЛЕДУЮЩЕЕ СПИСАНИЕ: ' + new Date(cardInfoQuery.data.subscribedUntil).toLocaleDateString('ru-RU')}
-                            </Text>
-                          )}
-                        </View>
+                    <TouchableOpacity
+                      style={styles.cancelSubscriptionButton}
+                      onPress={() => {
+                        Alert.alert(
+                          t.profile.subscriptionCancelConfirmTitle,
+                          t.profile.subscriptionCancelConfirmMessage,
+                          [
+                            { text: t.profile.cancel, style: 'cancel' },
+                            {
+                              text: t.profile.subscriptionConfirm,
+                              style: 'destructive',
+                              onPress: () => changeSubscription('basic'),
+                            },
+                          ]
+                        );
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.cancelSubscriptionText}>{t.profile.subscriptionCancel}</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Блок карты — показывается всегда когда карта сохранена */}
+                  {cardInfoQuery.data?.ok && cardInfoQuery.data.card && (
+                    <View style={styles.savedCardBlock}>
+                      <Text style={styles.savedCardLabel}>КАРТА ДЛЯ АВТОПРОДЛЕНИЯ</Text>
+                      <View style={styles.savedCardRow}>
+                        <Text style={styles.savedCardNumber}>
+                          {cardInfoQuery.data.card.cardType} •••• {cardInfoQuery.data.card.cardLast4}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={handleDeleteCard}
+                          disabled={cardDeleteLoading}
+                          activeOpacity={0.7}
+                          style={styles.deleteCardButton}
+                        >
+                          <Text style={styles.deleteCardText}>
+                            {cardDeleteLoading ? '...' : 'ОТВЯЗАТЬ'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      {cardInfoQuery.data.subscribedUntil && (
+                        <Text style={styles.nextBillingText}>
+                          {'СЛЕДУЮЩЕЕ СПИСАНИЕ: ' + new Date(cardInfoQuery.data.subscribedUntil).toLocaleDateString('ru-RU')}
+                        </Text>
                       )}
-                      <TouchableOpacity
-                        style={styles.cancelSubscriptionButton}
-                        onPress={() => {
-                          Alert.alert(
-                            t.profile.subscriptionCancelConfirmTitle,
-                            t.profile.subscriptionCancelConfirmMessage,
-                            [
-                              { text: t.profile.cancel, style: 'cancel' },
-                              {
-                                text: t.profile.subscriptionConfirm,
-                                style: 'destructive',
-                                onPress: () => changeSubscription('basic'),
-                              },
-                            ]
-                          );
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.cancelSubscriptionText}>{t.profile.subscriptionCancel}</Text>
-                      </TouchableOpacity>
-                    </>
+                    </View>
                   )}
                 </View>
               </View>
