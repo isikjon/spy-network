@@ -1,5 +1,5 @@
 import { useApp } from '@/contexts/AppContext';
-import { trpc } from '@/utils/trpc';
+import { trpc } from '@/lib/trpc';
 import { Redirect, router } from 'expo-router';
 import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor, Loader } from 'lucide-react-native';
 
