@@ -81,7 +81,6 @@ async function createYooKassaPayment(
       headers: yooKassaHeaders(shopId, secretKey, idempotenceKey),
       body: JSON.stringify({
         amount: { value: PRICE_RUB, currency: "RUB" },
-        payment_method_data: { type: "bank_card" },
         confirmation: { type: "redirect", return_url: returnUrl },
         description: `Spy Network ДОПУСК 2 (7 дней) — ${phone}`,
         metadata: { phone },
