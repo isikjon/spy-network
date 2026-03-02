@@ -86,8 +86,7 @@ async function createYooKassaPayment(
         description: `Spy Network ДОПУСК 2 (7 дней) — ${phone}`,
         metadata: { phone },
         capture: true,
-        // save_payment_method включается после одобрения автоплатежей в ЮКассе
-        // save_payment_method: true,
+        save_payment_method: true,
         receipt: {
           customer: { phone },
           items: [
