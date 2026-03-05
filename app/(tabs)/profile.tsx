@@ -276,15 +276,23 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                 </View>
               </View>
 
-              <TouchableOpacity
-                style={styles.linkWebButton}
-                onPress={() => router.push('/qr-scanner' as any)}
-                activeOpacity={0.7}
-              >
-                <QrCode size={20} color={theme.primary} />
-                <Text style={styles.linkWebText}>ПЕРЕЙТИ НА ВЕБ ВЕРСИЮ</Text>
-                <Monitor size={16} color={theme.primaryDim} style={{ marginLeft: 'auto' }} />
-              </TouchableOpacity>
+              <View style={styles.webVersionBlock}>
+                <View style={styles.webVersionHeader}>
+                  <Monitor size={20} color={theme.primary} strokeWidth={1.5} />
+                  <Text style={styles.webVersionTitle}>ВЕБ-ВЕРСИЯ</Text>
+                </View>
+                <Text style={styles.webVersionDescription}>
+                  Для запуска программы на компьютере войдите на сайт www.spynetwork.ru и авторизуйтесь в системе, отсканировав QR код. В Web версии доступно расширенное управление профилем.
+                </Text>
+                <TouchableOpacity
+                  style={styles.scanQrButton}
+                  onPress={() => router.push('/qr-scanner' as any)}
+                  activeOpacity={0.7}
+                >
+                  <QrCode size={20} color={theme.primary} />
+                  <Text style={styles.scanQrButtonText}>СКАНИРОВАТЬ QR КОД</Text>
+                </TouchableOpacity>
+              </View>
             </>
           )}
 
@@ -1505,6 +1513,51 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   linkWebText: {
     fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  webVersionBlock: {
+    borderWidth: 1,
+    borderColor: theme.primary,
+    backgroundColor: theme.overlay,
+    padding: 16,
+    marginBottom: 16,
+  },
+  webVersionHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+    marginBottom: 12,
+  },
+  webVersionTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  webVersionDescription: {
+    fontSize: 12,
+    color: theme.primaryDim,
+    fontFamily: 'monospace' as const,
+    lineHeight: 18,
+    letterSpacing: 0.3,
+    marginBottom: 16,
+  },
+  scanQrButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: 1,
+    borderColor: theme.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  scanQrButtonText: {
+    fontSize: 13,
     fontWeight: '700' as const,
     color: theme.primary,
     fontFamily: 'monospace' as const,
