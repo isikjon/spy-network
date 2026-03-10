@@ -115,6 +115,17 @@ app.get("/payment/success", (c) => {
 </html>`);
 });
 
+// app-ads.txt для рекламных сетей
+app.get("/app-ads.txt", async (c) => {
+  const fs = await import("node:fs/promises");
+  try {
+    const content = await fs.readFile("app-ads.txt", "utf-8");
+    return c.text(content);
+  } catch {
+    return c.text("", 404);
+  }
+});
+
 // Expo web app — JS/CSS бандлы и ассеты (по корню, не под /app)
 app.use("/_expo/*", serveStatic({ root: "dist" }));
 app.use("/assets/*", serveStatic({ root: "dist" }));
