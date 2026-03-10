@@ -968,10 +968,16 @@ function AnalyticsPanel(props: {
           </View>
 
           <View style={styles.table} testID="admin.analytics.users.table">
-            <View style={styles.tableHeader}>
-              <Text style={styles.tableHeaderCell}>ТЕЛЕФОН</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator>
+            <View>
+            <View style={[styles.tableHeader, { minWidth: 700 }]}>
+              <Text style={[styles.tableHeaderCell, { flex: 2 }]}>ТЕЛЕФОН</Text>
               <Text style={styles.tableHeaderCell}>ДОСЬЕ</Text>
-              <Text style={styles.tableHeaderCell}>ОБНОВЛ.</Text>
+              <Text style={styles.tableHeaderCell}>ДОПУСК</Text>
+              <Text style={styles.tableHeaderCell}>ПОДПИСКА</Text>
+              <Text style={styles.tableHeaderCell}>КАРТА</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 2 }]}>СПИСАНИЕ</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 2 }]}>ОБНОВЛ.</Text>
             </View>
 
             {renderAdminResultInline({ data: usersListData, isLoading, theme }) ??
@@ -981,6 +987,11 @@ function AnalyticsPanel(props: {
                   typeof u.updatedAt === "number" && u.updatedAt > 0
                     ? new Date(u.updatedAt).toLocaleString()
                     : "-";
+                const level = typeof u.level === "number" ? u.level : 1;
+                const subUntil = typeof u.subscribedUntil === "number" && u.subscribedUntil > 0
+                  ? new Date(u.subscribedUntil).toLocaleDateString("ru-RU")
+                  : "-";
+                const subActive = level >= 2;
 
                 return (
                   <TouchableOpacity
@@ -988,14 +999,24 @@ function AnalyticsPanel(props: {
                     testID={`admin.analytics.users.row.${phone}`}
                     activeOpacity={0.78}
                     onPress={() => onSelectFromList(phone)}
-                    style={styles.tableRowBtn}
+                    style={[styles.tableRowBtn, { minWidth: 700 }]}
                   >
-                    <Text style={styles.tableCellPrimary}>{phone}</Text>
+                    <Text style={[styles.tableCellPrimary, { flex: 2 }]}>{phone}</Text>
                     <Text style={styles.tableCell}>{String(u.dossiersCount ?? 0)}</Text>
-                    <Text style={styles.tableCell}>{updated}</Text>
+                    <Text style={[styles.tableCell, { color: level >= 2 ? theme.primary : theme.textSecondary }]}>
+                      {level}
+                    </Text>
+                    <Text style={[styles.tableCell, { color: subActive ? theme.primary : theme.danger }]}>
+                      {subActive ? "АКТИВ" : "НЕТ"}
+                    </Text>
+                    <Text style={styles.tableCell}>{u.hasCard ? "ДА" : "-"}</Text>
+                    <Text style={[styles.tableCell, { flex: 2 }]}>{subUntil}</Text>
+                    <Text style={[styles.tableCell, { flex: 2 }]}>{updated}</Text>
                   </TouchableOpacity>
                 );
               })}
+            </View>
+            </ScrollView>
           </View>
         </View>
           ) : null}

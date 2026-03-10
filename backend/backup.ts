@@ -22,10 +22,17 @@ function getPassword(): string {
   return process.env.TG_BACKUP_PASSWORD || "SNB-4F8K-X2QZ-7WPM";
 }
 
-function getStorePath(): string {
+function getDataDir(): string {
   const env = process.env.STORE_PATH;
-  if (env && typeof env === "string" && env.trim()) return env.trim();
-  return path.join(process.cwd(), "data", "store.json");
+  if (env && typeof env === "string" && env.trim()) return path.dirname(env.trim());
+  return path.join(process.cwd(), "data");
+}
+
+function getStorePath(): string {
+  const dataDir = getDataDir();
+  const dbPath = path.join(dataDir, "store.db");
+  if (fs.existsSync(dbPath)) return dbPath;
+  return path.join(dataDir, "store.json");
 }
 
 function getBackupDir(): string {
@@ -166,7 +173,7 @@ async function pollUpdates(): Promise<void> {
       await sendMessage(chatId,
         "✅ <b>Подписка активирована!</b>\n\n" +
         "Бэкапы базы данных будут приходить каждые 4 часа.\n" +
-        "Формат: <u>store-backup-ГГГГ-ММ-ДД_ЧЧ-ММ.json</u>\n\n" +
+        "Формат: <u>spy-network-backup-ГГГГ-ММ-ДД_ЧЧ-ММ.db</u>\n\n" +
         "/stop — отменить подписку"
       );
       console.log("[backup] new subscriber:", chatId);
@@ -174,27 +181,178 @@ async function pollUpdates(): Promise<void> {
   }
 }
 
+function escSql(val: string): string {
+  return val.replace(/'/g, "''");
+}
+
+function jsonToSql(storePath: string): string {
+  const raw = fs.readFileSync(storePath, "utf8");
+  const store = JSON.parse(raw) as Record<string, { value: unknown; updatedAt: number }>;
+
+  const lines: string[] = [];
+  const ts = new Date().toISOString();
+
+  lines.push(`-- Spy Network Database Backup`);
+  lines.push(`-- Generated: ${ts}`);
+  lines.push(`-- Format: SQL (from JSON key-value store)`);
+  lines.push(``);
+
+  lines.push(`DROP TABLE IF EXISTS kv_store;`);
+  lines.push(`CREATE TABLE kv_store (`);
+  lines.push(`  key TEXT PRIMARY KEY,`);
+  lines.push(`  value TEXT NOT NULL,`);
+  lines.push(`  updated_at BIGINT`);
+  lines.push(`);`);
+  lines.push(``);
+
+  for (const [key, rec] of Object.entries(store)) {
+    if (!rec || typeof rec !== "object") continue;
+    const val = JSON.stringify(rec.value ?? null);
+    const updAt = rec.updatedAt ?? 0;
+    lines.push(`INSERT INTO kv_store (key, value, updated_at) VALUES ('${escSql(key)}', '${escSql(val)}', ${updAt});`);
+  }
+
+  lines.push(``);
+  lines.push(`-- Normalized tables`);
+  lines.push(``);
+
+  lines.push(`DROP TABLE IF EXISTS users;`);
+  lines.push(`CREATE TABLE users (`);
+  lines.push(`  phone TEXT PRIMARY KEY,`);
+  lines.push(`  dossiers_count INTEGER DEFAULT 0,`);
+  lines.push(`  level INTEGER DEFAULT 1,`);
+  lines.push(`  subscribed_until BIGINT,`);
+  lines.push(`  has_card INTEGER DEFAULT 0,`);
+  lines.push(`  updated_at BIGINT`);
+  lines.push(`);`);
+  lines.push(``);
+
+  lines.push(`DROP TABLE IF EXISTS dossiers;`);
+  lines.push(`CREATE TABLE dossiers (`);
+  lines.push(`  id TEXT,`);
+  lines.push(`  owner_phone TEXT,`);
+  lines.push(`  name TEXT,`);
+  lines.push(`  phone TEXT,`);
+  lines.push(`  sectors TEXT,`);
+  lines.push(`  created_at BIGINT`);
+  lines.push(`);`);
+  lines.push(``);
+
+  lines.push(`DROP TABLE IF EXISTS user_levels;`);
+  lines.push(`CREATE TABLE user_levels (`);
+  lines.push(`  phone TEXT PRIMARY KEY,`);
+  lines.push(`  level INTEGER DEFAULT 1,`);
+  lines.push(`  subscribed_until BIGINT,`);
+  lines.push(`  updated_at BIGINT`);
+  lines.push(`);`);
+  lines.push(``);
+
+  lines.push(`DROP TABLE IF EXISTS payment_methods;`);
+  lines.push(`CREATE TABLE payment_methods (`);
+  lines.push(`  phone TEXT PRIMARY KEY,`);
+  lines.push(`  payment_method_id TEXT,`);
+  lines.push(`  card_last4 TEXT,`);
+  lines.push(`  card_type TEXT,`);
+  lines.push(`  saved_at BIGINT`);
+  lines.push(`);`);
+  lines.push(``);
+
+  const phones = new Set<string>();
+  for (const key of Object.keys(store)) {
+    const m = key.match(/^user:(\d+):data$/);
+    if (m) phones.add(m[1]);
+  }
+
+  for (const phone of phones) {
+    const dataRec = store[`user:${phone}:data`];
+    const levelRec = store[`user:${phone}:level`];
+    const cardRec = store[`user:${phone}:payment_method`];
+
+    const data = (dataRec?.value ?? {}) as Record<string, any>;
+    const level = (levelRec?.value ?? {}) as Record<string, any>;
+    const card = (cardRec?.value ?? null) as Record<string, any> | null;
+
+    const dossiers = Array.isArray(data.dossiers) ? data.dossiers : [];
+    const lvl = typeof level.level === "number" ? level.level : 1;
+    const subUntil = typeof level.subscribedUntil === "number" ? level.subscribedUntil : null;
+    const hasCard = card?.paymentMethodId ? 1 : 0;
+    const updAt = dataRec?.updatedAt ?? 0;
+
+    lines.push(`INSERT INTO users (phone, dossiers_count, level, subscribed_until, has_card, updated_at) VALUES ('${escSql(phone)}', ${dossiers.length}, ${lvl}, ${subUntil ?? "NULL"}, ${hasCard}, ${updAt});`);
+
+    if (levelRec) {
+      lines.push(`INSERT INTO user_levels (phone, level, subscribed_until, updated_at) VALUES ('${escSql(phone)}', ${lvl}, ${subUntil ?? "NULL"}, ${levelRec.updatedAt ?? 0});`);
+    }
+
+    if (card?.paymentMethodId) {
+      lines.push(`INSERT INTO payment_methods (phone, payment_method_id, card_last4, card_type, saved_at) VALUES ('${escSql(phone)}', '${escSql(String(card.paymentMethodId))}', '${escSql(String(card.cardLast4 || ""))}', '${escSql(String(card.cardType || ""))}', ${card.savedAt ?? 0});`);
+    }
+
+    for (const d of dossiers) {
+      const did = escSql(String(d.id || ""));
+      const dname = escSql(String(d.name || d.fullName || ""));
+      const dphone = escSql(String(d.phone || d.phoneNumber || ""));
+      const dsectors = escSql(Array.isArray(d.sectors) ? d.sectors.join(",") : "");
+      const dcreated = d.createdAt ?? d.addedAt ?? 0;
+      lines.push(`INSERT INTO dossiers (id, owner_phone, name, phone, sectors, created_at) VALUES ('${did}', '${escSql(phone)}', '${dname}', '${dphone}', '${dsectors}', ${dcreated});`);
+    }
+  }
+
+  lines.push(``);
+  lines.push(`-- End of backup`);
+  return lines.join("\n");
+}
+
 async function createBackup(): Promise<void> {
   const storePath = getStorePath();
   const backupDir = getBackupDir();
+  const isSqlite = storePath.endsWith(".db");
 
   try {
     if (!fs.existsSync(storePath)) {
-      console.log("[backup] store.json not found, skipping");
+      console.log("[backup] store not found at", storePath, "skipping");
       return;
     }
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 
-    const backupName = `store-backup-${formatDate(new Date())}.json`;
-    const backupPath = path.join(backupDir, backupName);
-    fs.copyFileSync(storePath, backupPath);
+    const dateStr = formatDate(new Date());
+    const filesToSend: { path: string; name: string }[] = [];
 
-    const sizeKb = Math.round(fs.statSync(backupPath).size / 1024);
-    console.log(`[backup] created ${backupName} (${sizeKb}KB), sending to ${subscribers.size} subscribers`);
+    if (isSqlite) {
+      const dbBackupName = `spy-network-backup-${dateStr}.db`;
+      const dbBackupPath = path.join(backupDir, dbBackupName);
+      fs.copyFileSync(storePath, dbBackupPath);
+
+      const walPath = storePath + "-wal";
+      if (fs.existsSync(walPath)) {
+        const walBackupName = `spy-network-backup-${dateStr}.db-wal`;
+        const walBackupPath = path.join(backupDir, walBackupName);
+        fs.copyFileSync(walPath, walBackupPath);
+      }
+
+      const sizeKb = Math.round(fs.statSync(dbBackupPath).size / 1024);
+      console.log(`[backup] created ${dbBackupName} (${sizeKb}KB) [SQLite], sending to ${subscribers.size} subscribers`);
+      filesToSend.push({ path: dbBackupPath, name: dbBackupName });
+    } else {
+      const jsonBackupName = `spy-network-backup-${dateStr}.json`;
+      const jsonBackupPath = path.join(backupDir, jsonBackupName);
+      fs.copyFileSync(storePath, jsonBackupPath);
+
+      const sqlContent = jsonToSql(storePath);
+      const sqlBackupName = `spy-network-backup-${dateStr}.sql`;
+      const sqlBackupPath = path.join(backupDir, sqlBackupName);
+      fs.writeFileSync(sqlBackupPath, sqlContent, "utf8");
+
+      console.log(`[backup] created ${sqlBackupName} + ${jsonBackupName}, sending to ${subscribers.size} subscribers`);
+      filesToSend.push({ path: sqlBackupPath, name: sqlBackupName });
+      filesToSend.push({ path: jsonBackupPath, name: jsonBackupName });
+    }
 
     for (const chatId of subscribers) {
-      const ok = await sendFileToChat(chatId, backupPath, backupName);
-      if (!ok) console.warn("[backup] failed to send to", chatId);
+      for (const f of filesToSend) {
+        const ok = await sendFileToChat(chatId, f.path, f.name);
+        if (!ok) console.warn("[backup] failed to send", f.name, "to", chatId);
+      }
     }
 
     await cleanupOldBackups();
@@ -208,7 +366,7 @@ async function cleanupOldBackups(): Promise<void> {
   try {
     if (!fs.existsSync(backupDir)) return;
     const files = fs.readdirSync(backupDir)
-      .filter((f) => f.startsWith("store-backup-") && f.endsWith(".json"))
+      .filter((f) => (f.startsWith("store-backup-") || f.startsWith("spy-network-backup-")) && (f.endsWith(".json") || f.endsWith(".sql") || f.endsWith(".db") || f.endsWith(".db-wal")))
       .sort().reverse();
     if (files.length <= MAX_BACKUPS) return;
     for (const file of files.slice(MAX_BACKUPS)) {
