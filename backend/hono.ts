@@ -74,7 +74,7 @@ app.get("/api/status", (c) => {
 });
 
 // Webhook от YooKassa — подтверждение оплаты
-app.post("/payment/webhook/yookassa", async (c) => {
+app.post("/payment/webhook/yukassa", async (c) => {
   try {
     const body = (await c.req.json()) as Record<string, unknown>;
     console.log("[webhook] yookassa incoming", JSON.stringify(body));
