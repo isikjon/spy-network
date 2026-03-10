@@ -250,29 +250,24 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
           ) : (
             <>
               <View style={styles.profileCard}>
-                <View style={styles.avatar}>
-                  <Shield size={48} color={theme.primary} strokeWidth={1.5} />
-                </View>
-                <View style={styles.phoneContainer}>
-                  <Phone size={16} color={theme.primaryDim} />
-                  <Text style={styles.phoneText}>{phoneNumber}</Text>
-                </View>
-
-                <View style={styles.clearanceInline}>
-                  <View style={styles.clearanceLevelRow}>
-                    <Text style={styles.clearanceLevelLabel}>ДОПУСК</Text>
-                    <View style={[
-                      styles.clearanceLevelBadge,
-                      subscriptionLevel === 'working' && styles.clearanceLevelBadgeActive,
-                    ]}>
-                      <Text style={[
-                        styles.clearanceLevelValue,
-                        subscriptionLevel === 'working' && styles.clearanceLevelValueActive,
-                      ]}>
-                        {subscriptionLevel === 'working' ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1'}
-                      </Text>
+                <View style={styles.mobileProfileRow}>
+                  <View style={styles.mobileProfileLeft}>
+                    <View style={styles.avatar}>
+                      <Shield size={48} color={theme.primary} strokeWidth={1.5} />
                     </View>
                   </View>
+                  <View style={styles.mobileProfileRight}>
+                    <View style={styles.phoneContainer}>
+                      <Phone size={16} color={theme.primaryDim} />
+                      <Text style={styles.phoneText}>{phoneNumber}</Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.mobileProfileLabels}>
+                  <Text style={styles.mobileProfileLabelLeft}>ДОПУСК</Text>
+                  <Text style={styles.mobileProfileLabelRight}>
+                    {subscriptionLevel === 'working' ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1'}
+                  </Text>
                 </View>
               </View>
 
@@ -1596,6 +1591,39 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '700' as const,
     color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  mobileProfileRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 24,
+    paddingVertical: 16,
+  },
+  mobileProfileLeft: {
+    alignItems: 'center' as const,
+  },
+  mobileProfileRight: {
+    alignItems: 'center' as const,
+  },
+  mobileProfileLabels: {
+    flexDirection: 'row' as const,
+    justifyContent: 'center' as const,
+    gap: 40,
+    paddingBottom: 12,
+  },
+  mobileProfileLabelLeft: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.primaryDim,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  mobileProfileLabelRight: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.primaryDim,
     fontFamily: 'monospace' as const,
     letterSpacing: 2,
   },
