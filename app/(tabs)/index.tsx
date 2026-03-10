@@ -40,7 +40,7 @@ import ProfileScreen from './profile';
 type OpenDossierHandler = (payload: { id: string; edit?: boolean }) => void;
 
 function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) {
-  const { dossiers, addDossier, theme, t } = useApp();
+  const { dossiers, addDossier, theme, t, subscriptionLevel } = useApp();
   const [search, setSearch] = useState('');
   const [showContactsModal, setShowContactsModal] = useState(false);
   const [phoneContacts, setPhoneContacts] = useState<any[]>([]);
@@ -183,54 +183,112 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
     }
   };
 
-  const renderDossier = ({ item }: { item: ContactDossier }) => (
-    <TouchableOpacity
-      style={styles.dossierCard}
-      onPress={() => {
-        if (onOpenDossier) {
-          onOpenDossier({ id: item.contact.id });
-        } else {
-          router.push({ pathname: '/dossier/[id]' as any, params: { id: item.contact.id } });
-        }
-      }}
-      activeOpacity={0.7}
-    >
-      <View style={styles.dossierHeader}>
-        <View style={styles.dossierIcon}>
-          <FileText size={20} color={theme.primary} />
-        </View>
-        <View style={styles.dossierInfo}>
-          <Text style={styles.dossierName}>{item.contact.name}</Text>
-          {item.powerGrouping?.groupName && (
-            <Text style={styles.powerGroupingName}>{item.powerGrouping.groupName.toUpperCase()}</Text>
-          )}
-          <Text style={styles.dossierMeta}>
-            {item.contact.position || t.dossiers.unknownPosition}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.importanceBadge,
-            { borderColor: getImportanceColor(item.importance) },
-          ]}
+  const isOverLimit = subscriptionLevel !== 'working' && dossiers.length > 20;
+
+  const showLimitAlert = () => {
+    Alert.alert(
+      'ЛИМИТ КОНТАКТОВ',
+      'Ваш УРОВЕНЬ ДОПУСКА: 1. Лимит контактов: 20. Войдите в Ваш профиль на WEB странице системы, для повышения уровня допуска.',
+      [
+        { text: 'Закрыть', style: 'cancel' },
+        {
+          text: 'Профиль',
+          onPress: () => router.push('/(tabs)/profile' as any),
+        },
+      ],
+    );
+  };
+
+  const renderDossier = ({ item, index }: { item: ContactDossier; index: number }) => {
+    const isLocked = isOverLimit && index >= 20;
+
+    if (isLocked) {
+      return (
+        <TouchableOpacity
+          style={styles.dossierCard}
+          onPress={showLimitAlert}
+          activeOpacity={0.7}
         >
-          <Text
+          <View style={styles.lockedOverlay}>
+            <View style={styles.dossierHeader}>
+              <View style={styles.dossierIcon}>
+                <FileText size={20} color={theme.primaryDim} />
+              </View>
+              <View style={styles.dossierInfo}>
+                <Text style={[styles.dossierName, { color: theme.primaryDim, opacity: 0.4 }]}>
+                  {'●●●●●● ●●●●●●●●'}
+                </Text>
+                <Text style={[styles.dossierMeta, { opacity: 0.3 }]}>
+                  {'●●●●●●●●●●●●'}
+                </Text>
+              </View>
+              <View style={[styles.importanceBadge, { borderColor: theme.danger }]}>
+                <Text style={[styles.importanceText, { color: theme.danger }]}>LOCKED</Text>
+              </View>
+            </View>
+            {index === 20 && (
+              <View style={styles.lockedBanner}>
+                <Text style={styles.lockedBannerTitle}>ЛИМИТ КОНТАКТОВ</Text>
+                <Text style={styles.lockedBannerText}>
+                  Допуск 1 — максимум 20 контактов. Повысьте допуск для доступа.
+                </Text>
+                <Text style={styles.lockedBannerLink}>ПОДРОБНЕЕ →</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={styles.dossierCard}
+        onPress={() => {
+          if (onOpenDossier) {
+            onOpenDossier({ id: item.contact.id });
+          } else {
+            router.push({ pathname: '/dossier/[id]' as any, params: { id: item.contact.id } });
+          }
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={styles.dossierHeader}>
+          <View style={styles.dossierIcon}>
+            <FileText size={20} color={theme.primary} />
+          </View>
+          <View style={styles.dossierInfo}>
+            <Text style={styles.dossierName}>{item.contact.name}</Text>
+            {item.powerGrouping?.groupName && (
+              <Text style={styles.powerGroupingName}>{item.powerGrouping.groupName.toUpperCase()}</Text>
+            )}
+            <Text style={styles.dossierMeta}>
+              {item.contact.position || t.dossiers.unknownPosition}
+            </Text>
+          </View>
+          <View
             style={[
-              styles.importanceText,
-              { color: getImportanceColor(item.importance) },
+              styles.importanceBadge,
+              { borderColor: getImportanceColor(item.importance) },
             ]}
           >
-            {item.importance.toUpperCase()}
-          </Text>
+            <Text
+              style={[
+                styles.importanceText,
+                { color: getImportanceColor(item.importance) },
+              ]}
+            >
+              {item.importance.toUpperCase()}
+            </Text>
+          </View>
         </View>
-      </View>
-      <View style={styles.dossierFooter}>
-        {item.contact.goal && (
-          <Text style={styles.dossierGoal}>{item.contact.goal}</Text>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.dossierFooter}>
+          {item.contact.goal && (
+            <Text style={styles.dossierGoal}>{item.contact.goal}</Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.background} testID="dossiersTabRoot">
@@ -586,6 +644,37 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.overlay,
     padding: 16,
     marginBottom: 12,
+  },
+  lockedOverlay: {
+    opacity: 0.6,
+  },
+  lockedBanner: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme.danger,
+  },
+  lockedBannerTitle: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.danger,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  lockedBannerText: {
+    fontSize: 11,
+    color: theme.primaryDim,
+    fontFamily: 'monospace' as const,
+    lineHeight: 16,
+    marginBottom: 6,
+  },
+  lockedBannerLink: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
   },
   dossierHeader: {
     flexDirection: 'row',
