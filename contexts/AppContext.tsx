@@ -450,8 +450,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
     });
   }, [appDataQuery.data, currentLanguage, phoneNumber, saveAppDataToServer, selfContactEnsuredForPhone]);
 
-  const addDossier = useCallback((dossier: ContactDossier): { ok: true } | { ok: false; error: 'DUPLICATE'; existingId: string; existingName: string } => {
-    // Нормализация номера: только цифры
+  const addDossier = useCallback((dossier: ContactDossier): { ok: true } | { ok: false; error: 'DUPLICATE'; existingId: string; existingName: string } | { ok: false; error: 'LIMIT_EXCEEDED' } => {
+    if (subscriptionLevel !== 'working' && dossiers.length >= 20) {
+      return { ok: false, error: 'LIMIT_EXCEEDED' };
+    }
+
     const normalizePhone = (p: string) => p.replace(/\D/g, '');
 
     const newPhones = (dossier.contact.phoneNumbers || [])
@@ -471,7 +474,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     const updated = [...dossiers, dossier];
     saveAppDataToServer({ dossiers: updated, sectors, powerGroupings });
     return { ok: true };
-  }, [dossiers, saveAppDataToServer, sectors, powerGroupings]);
+  }, [dossiers, saveAppDataToServer, sectors, powerGroupings, subscriptionLevel]);
 
   const updateDossier = useCallback((id: string, updates: Partial<ContactDossier>) => {
     const updated = dossiers.map((d) => (d.contact.id === id ? { ...d, ...updates } : d));

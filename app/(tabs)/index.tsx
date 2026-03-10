@@ -121,6 +121,24 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
       addedDate: new Date(),
     };
     const result = addDossier(newDossier);
+    if (!result.ok && result.error === 'LIMIT_EXCEEDED') {
+      setShowContactsModal(false);
+      setContactSearch('');
+      Alert.alert(
+        'ЛИМИТ КОНТАКТОВ',
+        'Ваш УРОВЕНЬ ДОПУСКА: 1. Лимит контактов: 20. Войдите в Ваш профиль на WEB странице системы, для повышения уровня допуска.',
+        [
+          { text: 'Закрыть', style: 'cancel' },
+          {
+            text: 'Профиль',
+            onPress: () => {
+              router.push('/(tabs)/profile' as any);
+            },
+          },
+        ],
+      );
+      return;
+    }
     if (!result.ok && result.error === 'DUPLICATE') {
       setShowContactsModal(false);
       setContactSearch('');

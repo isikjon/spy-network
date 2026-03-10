@@ -317,6 +317,42 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
             </View>
           )}
 
+          {Platform.OS !== 'web' && (
+            <View style={styles.mobileInfoBlock}>
+              <View style={styles.mobileInfoRow}>
+                <Text style={styles.mobileInfoLabel}>СТАТУС</Text>
+                <Text style={[styles.mobileInfoValue, { color: theme.primary }]}>АКТИВЕН</Text>
+              </View>
+              <View style={styles.mobileInfoRow}>
+                <Text style={styles.mobileInfoLabel}>ДОПУСК</Text>
+                <Text style={styles.mobileInfoValue}>
+                  {subscriptionLevel === 'working' ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1'}
+                </Text>
+              </View>
+              <View style={styles.mobileInfoRow}>
+                <Text style={styles.mobileInfoLabel}>КОНТАКТЫ</Text>
+                <Text style={[
+                  styles.mobileInfoValue,
+                  subscriptionLevel !== 'working' && dossiers.length >= 20 && { color: theme.danger },
+                ]}>
+                  {subscriptionLevel === 'working' ? `${dossiers.length} / ∞` : `${dossiers.length} / 20`}
+                </Text>
+              </View>
+              <View style={styles.mobileInfoRow}>
+                <Text style={styles.mobileInfoLabel}>ШИФРОВАНИЕ</Text>
+                <Text style={styles.mobileInfoValue}>AES-256</Text>
+              </View>
+              {subscriptionLevel !== 'working' && (
+                <View style={styles.mobileUpgradeBlock}>
+                  <Text style={styles.mobileUpgradeTitle}>ПОВЫСИТЬ ДОПУСК</Text>
+                  <Text style={styles.mobileUpgradeDesc}>
+                    Повысьте допуск в профиле на WEB странице системы для снятия лимитов и отключения рекламы.
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {Platform.OS === 'web' && (
             <View style={[styles.subscriptionContainer, styles.webBlockSpacing, styles.webBlockMinHeight]}>
               <View style={styles.subscriptionHeader}>
@@ -1562,5 +1598,55 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.primary,
     fontFamily: 'monospace' as const,
     letterSpacing: 2,
+  },
+  mobileInfoBlock: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.overlay,
+    marginBottom: 16,
+  },
+  mobileInfoRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  mobileInfoLabel: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+    fontWeight: '700' as const,
+  },
+  mobileInfoValue: {
+    fontSize: 12,
+    color: theme.text,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+    fontWeight: '700' as const,
+  },
+  mobileUpgradeBlock: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.primary,
+  },
+  mobileUpgradeTitle: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+    marginBottom: 6,
+  },
+  mobileUpgradeDesc: {
+    fontSize: 11,
+    color: theme.primaryDim,
+    fontFamily: 'monospace' as const,
+    lineHeight: 16,
+    letterSpacing: 0.3,
   },
 });

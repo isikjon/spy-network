@@ -1,7 +1,9 @@
 import * as z from "zod";
 
-import { storeGet, storeListKeys } from "../../store";
+import { storeGet, storeListKeys, storeDelete } from "../../store";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+import { getUserLevel } from "../utils/user-level";
+import type { SavedCard } from "./payment";
 import {
   createAdminUser,
   deleteAdminUser,
@@ -289,15 +291,23 @@ export const adminRouter = createTRPCRouter({
         phoneNumber: string;
         dossiersCount: number;
         updatedAt: number;
+        level: number;
+        subscribedUntil: number | null;
+        hasCard: boolean;
       }[] = [];
 
       for (const phone of phones) {
         const stored = await storeGet<UserAppData>(`user:${phone}:data`);
         if (!stored) continue;
+        const levelData = await getUserLevel(phone);
+        const card = await storeGet<SavedCard>(`user:${phone}:payment_method`);
         users.push({
           phoneNumber: maskPhone(stored.phoneNumber || phone),
           dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
           updatedAt: typeof stored.updatedAt === "number" ? stored.updatedAt : 0,
+          level: levelData.level,
+          subscribedUntil: levelData.subscribedUntil,
+          hasCard: !!card?.paymentMethodId,
         });
       }
 
@@ -705,4 +715,21 @@ export const adminRouter = createTRPCRouter({
 
     return { ok: true as const, groups };
   }),
+
+  deleteUserProfile: publicProcedure
+    .input(z.object({ phoneNumber: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      console.log("[backend] admin.deleteUserProfile", { phone: input.phoneNumber });
+
+      if (!isAdminRequest(ctx) || !requireAdminRole(ctx, ["admin"])) {
+        return { ok: false as const, error: "FORBIDDEN" as const };
+      }
+
+      const phone = input.phoneNumber;
+      await storeDelete(`user:${phone}:data`);
+      await storeDelete(`user:${phone}:level`);
+      await storeDelete(`user:${phone}:payment_method`);
+      console.log("[admin] deleted user profile", { phone });
+      return { ok: true as const };
+    }),
 });
