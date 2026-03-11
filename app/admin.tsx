@@ -970,13 +970,14 @@ function AnalyticsPanel(props: {
           <View style={styles.table} testID="admin.analytics.users.table">
             <ScrollView horizontal showsHorizontalScrollIndicator>
             <View>
-            <View style={[styles.tableHeader, { minWidth: 700 }]}>
+            <View style={[styles.tableHeader, { minWidth: 900 }]}>
               <Text style={[styles.tableHeaderCell, { flex: 2 }]}>ТЕЛЕФОН</Text>
               <Text style={styles.tableHeaderCell}>ДОСЬЕ</Text>
               <Text style={styles.tableHeaderCell}>ДОПУСК</Text>
-              <Text style={styles.tableHeaderCell}>ПОДПИСКА</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>СТАТУС ПОДПИСКИ</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>СТАТУС ОПЛАТЫ</Text>
               <Text style={styles.tableHeaderCell}>КАРТА</Text>
-              <Text style={[styles.tableHeaderCell, { flex: 2 }]}>СПИСАНИЕ</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 2 }]}>СЛЕД. СПИСАНИЕ</Text>
               <Text style={[styles.tableHeaderCell, { flex: 2 }]}>ОБНОВЛ.</Text>
             </View>
 
@@ -992,6 +993,17 @@ function AnalyticsPanel(props: {
                   ? new Date(u.subscribedUntil).toLocaleDateString("ru-RU")
                   : "-";
                 const subActive = level >= 2;
+                const paymentStatus = u.lastPaymentStatus ?? null;
+                const paymentDate = typeof u.lastPaymentDate === "number" && u.lastPaymentDate > 0
+                  ? new Date(u.lastPaymentDate).toLocaleDateString("ru-RU")
+                  : null;
+
+                let paymentLabel = "НЕТ";
+                let paymentColor = theme.textSecondary;
+                if (paymentStatus === "succeeded") {
+                  paymentLabel = paymentDate ? `ОПЛАЧЕН ${paymentDate}` : "ОПЛАЧЕН";
+                  paymentColor = theme.primary;
+                }
 
                 return (
                   <TouchableOpacity
@@ -999,15 +1011,18 @@ function AnalyticsPanel(props: {
                     testID={`admin.analytics.users.row.${phone}`}
                     activeOpacity={0.78}
                     onPress={() => onSelectFromList(phone)}
-                    style={[styles.tableRowBtn, { minWidth: 700 }]}
+                    style={[styles.tableRowBtn, { minWidth: 900 }]}
                   >
                     <Text style={[styles.tableCellPrimary, { flex: 2 }]}>{phone}</Text>
                     <Text style={styles.tableCell}>{String(u.dossiersCount ?? 0)}</Text>
                     <Text style={[styles.tableCell, { color: level >= 2 ? theme.primary : theme.textSecondary }]}>
-                      {level}
+                      {level >= 2 ? "УРОВЕНЬ 2" : "УРОВЕНЬ 1"}
                     </Text>
-                    <Text style={[styles.tableCell, { color: subActive ? theme.primary : theme.danger }]}>
-                      {subActive ? "АКТИВ" : "НЕТ"}
+                    <Text style={[styles.tableCell, { flex: 1.5, color: subActive ? theme.primary : theme.danger }]}>
+                      {subActive ? "АКТИВНА" : "НЕ АКТИВНА"}
+                    </Text>
+                    <Text style={[styles.tableCell, { flex: 1.5, color: paymentColor }]}>
+                      {paymentLabel}
                     </Text>
                     <Text style={styles.tableCell}>{u.hasCard ? "ДА" : "-"}</Text>
                     <Text style={[styles.tableCell, { flex: 2 }]}>{subUntil}</Text>

@@ -1,7 +1,7 @@
 import * as z from "zod";
 
 import type { ContactDossier } from "../../../types";
-import { storeGet, storeSet } from "../../store";
+import { storeGet, storeSet, storeDelete } from "../../store";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { getUserLevel, setUserLevel, checkContactLimit, MAX_CONTACTS_LEVEL_1 } from "../utils/user-level";
 import type { UserLevel } from "../utils/user-level";
@@ -98,7 +98,7 @@ export const appDataRouter = createTRPCRouter({
     if (!stored) {
       const initial = emptyUserData(phone);
       await storeSet(key, initial);
-      return { ok: true as const, data: initial };
+      return { ok: true as const, data: initial, level: 1, subscribedUntil: null as number | null };
     }
 
     const parsed = UserAppDataSchema.safeParse(stored);
@@ -108,10 +108,10 @@ export const appDataRouter = createTRPCRouter({
       });
       const fallback = emptyUserData(phone);
       await storeSet(key, fallback);
-      return { ok: true as const, data: fallback };
+      const levelData = await getUserLevel(phone);
+      return { ok: true as const, data: fallback, level: levelData.level, subscribedUntil: levelData.subscribedUntil };
     }
 
-    // Проверяем нужна ли нормализация (strength > 10 в старых данных)
     const hasOutOfRangeStrength = (stored as any)?.dossiers?.some((d: any) =>
       d?.relations?.some((r: any) => typeof r?.strength === 'number' && r.strength > 10)
     );
@@ -120,7 +120,8 @@ export const appDataRouter = createTRPCRouter({
       await storeSet(key, { ...parsed.data, updatedAt: Date.now() });
     }
 
-    return { ok: true as const, data: parsed.data };
+    const levelData = await getUserLevel(phone);
+    return { ok: true as const, data: parsed.data, level: levelData.level, subscribedUntil: levelData.subscribedUntil };
   }),
 
   saveMyData: publicProcedure
@@ -238,4 +239,19 @@ export const appDataRouter = createTRPCRouter({
 
       return { ok: true as const, levelData: result };
     }),
+
+  deleteMyAccount: publicProcedure.mutation(async ({ ctx }) => {
+    const phone = ctx.userPhone;
+    if (!phone) {
+      return { ok: false as const, error: "UNAUTHENTICATED" as const };
+    }
+
+    console.log("[backend] appData.deleteMyAccount", { phone });
+
+    await storeDelete(`user:${phone}:data`);
+    await storeDelete(`user:${phone}:level`);
+    await storeDelete(`user:${phone}:payment_method`);
+
+    return { ok: true as const };
+  }),
 });

@@ -258,16 +258,17 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   useEffect(() => {
     if (appDataQuery.data && (appDataQuery.data as any).ok === true) {
-      const data = (appDataQuery.data as any).data;
+      const resp = appDataQuery.data as any;
+      const data = resp.data;
+      const serverLevelNum = typeof resp.level === 'number' ? resp.level : (typeof data?.level === 'number' ? data.level : null);
       console.log('[AppContext] hydrate from server', {
         dossiers: Array.isArray(data?.dossiers) ? data.dossiers.length : -1,
         updatedAt: data?.updatedAt,
-        level: data?.level,
+        level: serverLevelNum,
       });
 
-      // Синхронизируем уровень подписки с сервером
-      if (typeof data?.level === 'number') {
-        const serverLevel: SubscriptionLevel = data.level >= 2 ? 'working' : 'basic';
+      if (typeof serverLevelNum === 'number') {
+        const serverLevel: SubscriptionLevel = serverLevelNum >= 2 ? 'working' : 'basic';
         setSubscriptionLevel(serverLevel);
         saveSubscription(serverLevel);
       }

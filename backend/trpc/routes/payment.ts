@@ -204,7 +204,7 @@ export const paymentRouter = createTRPCRouter({
       return { ok: false as const, error: "NOT_CONFIGURED" as const };
     }
 
-    const returnUrl = `${getBaseUrl()}/app/payment-success`;
+    const returnUrl = `${getBaseUrl()}/payment/success`;
     const result = await createYooKassaPayment(ctx.userPhone, creds.shopId, creds.secretKey, returnUrl);
 
     if (!result.ok) {

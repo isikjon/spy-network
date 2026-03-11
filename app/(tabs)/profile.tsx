@@ -2,7 +2,7 @@ import { YandexBanner } from '@/components/YandexBanner';
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { Redirect, router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor, Loader, MessageCircle } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor, Loader, MessageCircle, UserX } from 'lucide-react-native';
 
 import Tutorial from '@/components/Tutorial';
 import {
@@ -38,9 +38,11 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [cardDeleteLoading, setCardDeleteLoading] = useState(false);
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
 
   const createPaymentMutation = trpc.payment.createPayment.useMutation();
   const deleteCardMutation = trpc.payment.deleteCard.useMutation();
+  const deleteAccountMutation = trpc.appData.deleteMyAccount.useMutation();
   const cardInfoQuery = trpc.payment.getCardInfo.useQuery(undefined, { enabled: !!phoneNumber });
 
   const handleSubscribe = async () => {
@@ -82,6 +84,36 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
               Alert.alert('Ошибка', 'Не удалось отвязать карту. Попробуйте позже.');
             } finally {
               setCardDeleteLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      currentLanguage === 'ru' ? 'Удалить аккаунт' : 'Delete Account',
+      currentLanguage === 'ru'
+        ? 'Все данные будут безвозвратно удалены: досье, контакты, подписка. Вы уверены?'
+        : 'All data will be permanently deleted: dossiers, contacts, subscription. Are you sure?',
+      [
+        { text: currentLanguage === 'ru' ? 'Отмена' : 'Cancel', style: 'cancel' },
+        {
+          text: currentLanguage === 'ru' ? 'Удалить' : 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleteAccountLoading(true);
+            try {
+              await deleteAccountMutation.mutateAsync();
+              logout();
+            } catch {
+              Alert.alert(
+                currentLanguage === 'ru' ? 'Ошибка' : 'Error',
+                currentLanguage === 'ru' ? 'Не удалось удалить аккаунт.' : 'Failed to delete account.'
+              );
+            } finally {
+              setDeleteAccountLoading(false);
             }
           },
         },
@@ -660,6 +692,22 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
             <Text style={styles.supportText}>{currentLanguage === 'ru' ? 'ПОДДЕРЖКА' : 'SUPPORT'}</Text>
           </TouchableOpacity>
 
+          {Platform.OS === 'web' && (
+            <TouchableOpacity
+              style={[styles.deleteAccountButton, deleteAccountLoading && { opacity: 0.6 }]}
+              onPress={handleDeleteAccount}
+              activeOpacity={0.7}
+              disabled={deleteAccountLoading}
+            >
+              <UserX size={20} color={theme.danger} />
+              <Text style={styles.deleteAccountText}>
+                {deleteAccountLoading
+                  ? '...'
+                  : currentLanguage === 'ru' ? 'УДАЛИТЬ АККАУНТ' : 'DELETE ACCOUNT'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.logoutButton}
             onPress={handleLogout}
@@ -1105,6 +1153,25 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '700' as const,
     color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  deleteAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: theme.danger,
+    backgroundColor: theme.overlay,
+    paddingVertical: 16,
+    gap: 12,
+    marginBottom: 12,
+    opacity: 0.7,
+  },
+  deleteAccountText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.danger,
     fontFamily: 'monospace' as const,
     letterSpacing: 1,
   },

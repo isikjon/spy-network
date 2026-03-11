@@ -294,6 +294,8 @@ export const adminRouter = createTRPCRouter({
         level: number;
         subscribedUntil: number | null;
         hasCard: boolean;
+        lastPaymentStatus: string | null;
+        lastPaymentDate: number | null;
       }[] = [];
 
       for (const phone of phones) {
@@ -301,6 +303,17 @@ export const adminRouter = createTRPCRouter({
         if (!stored) continue;
         const levelData = await getUserLevel(phone);
         const card = await storeGet<SavedCard>(`user:${phone}:payment_method`);
+
+        let lastPaymentStatus: string | null = null;
+        let lastPaymentDate: number | null = null;
+        if (card?.savedAt) {
+          lastPaymentStatus = "succeeded";
+          lastPaymentDate = card.savedAt;
+        } else if (levelData.level >= 2 && levelData.subscribedUntil) {
+          lastPaymentStatus = "succeeded";
+          lastPaymentDate = levelData.subscribedUntil - 7 * 24 * 60 * 60 * 1000;
+        }
+
         users.push({
           phoneNumber: maskPhone(stored.phoneNumber || phone),
           dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
@@ -308,6 +321,8 @@ export const adminRouter = createTRPCRouter({
           level: levelData.level,
           subscribedUntil: levelData.subscribedUntil,
           hasCard: !!card?.paymentMethodId,
+          lastPaymentStatus,
+          lastPaymentDate,
         });
       }
 
