@@ -2,6 +2,10 @@
  * Plusofon Обратный Flash Call API client
  * Документация: https://help.plusofon.ru/api/v1/flash-call#post_call-to-auth
  *
+ * ВАЖНО: PLUSOFON_FC_TOKEN должен быть access_token аккаунта Flash Call,
+ * а НЕ токен личного кабинета! Иначе будет «Недостаточно прав» (403).
+ * Получить: ЛК Plusofon → Flash Call → access_token, или GET /api/v1/flash-call
+ *
  * Обратный Flash Call — полный флоу:
  *
  *   1. POST /api/v1/flash-call/call-to-auth

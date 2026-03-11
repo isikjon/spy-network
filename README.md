@@ -41,6 +41,17 @@ docker run -d \
   spy-network
 ```
 
+## Plusofon Flash Call — токен
+
+**Ошибка «Недостаточно прав»** означает, что в `PLUSOFON_FC_TOKEN` указан токен личного кабинета, а нужен **access_token** аккаунта Flash Call.
+
+1. Войти в [личный кабинет Plusofon](https://cabinet.plusofon.ru)
+2. Раздел **Flash Call** → список аккаунтов
+3. Взять `access_token` нужного аккаунта (или создать новый)
+4. Либо через API: `GET https://restapi.plusofon.ru/api/v1/flash-call` с токеном ЛК → в ответе `data[].access_token`
+
+`PLUSOFON_FC_TOKEN` = этот `access_token`, **не** токен личного кабинета.
+
 ## Сборка APK
 
 ```bash

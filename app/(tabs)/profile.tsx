@@ -2,7 +2,7 @@ import { YandexBanner } from '@/components/YandexBanner';
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { Redirect, router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor, Loader } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor, Loader, MessageCircle } from 'lucide-react-native';
 
 import Tutorial from '@/components/Tutorial';
 import {
@@ -242,7 +242,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                 </View>
                 <View style={styles.webProfileColRight}>
                   <View style={styles.webPhoneLast3Wrap}>
-                    <Text style={styles.webPhoneLast3}>{phoneNumber ? phoneNumber.slice(-3) : '---'}</Text>
+                    <Text style={styles.webPhoneLast3}>{phoneNumber ? (phoneNumber.replace(/\D/g, '')).slice(-3) || '---' : '---'}</Text>
                   </View>
                   <Text style={styles.webClearanceLevel}>УРОВЕНЬ {subscriptionLevel === 'working' ? '2' : '1'}</Text>
                 </View>
@@ -260,7 +260,13 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                   </View>
                   <View style={styles.webProfileColRight}>
                     <View style={styles.webPhoneLast3Wrap}>
-                      <Text style={styles.webPhoneLast3}>{phoneNumber ? phoneNumber.slice(-3) : '---'}</Text>
+                      <Text style={[styles.webPhoneLast3, styles.mobilePhoneLast3]} adjustsFontSizeToFit>
+                        {(() => {
+                          if (!phoneNumber) return '---';
+                          const digits = phoneNumber.replace(/\D/g, '');
+                          return digits.length >= 3 ? digits.slice(-3) : digits || '---';
+                        })()}
+                      </Text>
                     </View>
                     <Text style={styles.webClearanceLevel}>УРОВЕНЬ {subscriptionLevel === 'working' ? '2' : '1'}</Text>
                   </View>
@@ -283,6 +289,81 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                   <QrCode size={20} color={theme.primary} />
                   <Text style={styles.scanQrButtonText}>СКАНИРОВАТЬ QR КОД</Text>
                 </TouchableOpacity>
+              </View>
+
+              {Platform.OS !== 'web' && (
+                <View style={styles.sectorsContainer}>
+                  <View style={styles.sectorsHeader}>
+                    <View style={styles.sectorsHeaderLeft}>
+                      <Tag size={20} color={theme.primary} strokeWidth={1.5} />
+                      <Text style={styles.sectorsTitle}>{t.profile.sectors}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.addButton}
+                      onPress={() => setShowAddModal(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Plus size={18} color={theme.primary} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.sectorsList}>
+                    {sectors.map((sector) => (
+                      <View key={sector} style={styles.sectorItem}>
+                        <Text style={styles.sectorName}>{sector.toUpperCase()}</Text>
+                        <View style={styles.sectorActions}>
+                          <TouchableOpacity
+                            onPress={() => handleEditSector(sector)}
+                            activeOpacity={0.7}
+                            style={styles.sectorActionButton}
+                          >
+                            <Edit2 size={14} color={theme.primary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteSector(sector)}
+                            activeOpacity={0.7}
+                            style={styles.sectorActionButton}
+                          >
+                            <Trash2 size={14} color={theme.danger} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <View style={[styles.themeContainer, Platform.OS === 'web' && styles.webBlockSpacing]}>
+                <View style={styles.themeHeader}>
+                  <View style={styles.themeHeaderLeft}>
+                    <Palette size={20} color={theme.primary} strokeWidth={1.5} />
+                    <Text style={styles.themeTitle}>{t.profile.theme}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.themeButton}
+                    onPress={() => setShowThemeModal(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.themeButtonText}>
+                      {currentTheme === 'spy' ? t.profile.spy : currentTheme === 'business' ? t.profile.business : t.profile.genesis}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.languageContainer}>
+                <View style={styles.languageHeader}>
+                  <View style={styles.languageHeaderLeft}>
+                    <Globe size={20} color={theme.primary} strokeWidth={1.5} />
+                    <Text style={styles.languageTitle}>{t.profile.language}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.languageButton}
+                    onPress={() => setShowLanguageModal(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.languageButtonText}>{currentLanguage === 'ru' ? t.profile.russian : t.profile.english}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </>
           )}
@@ -523,7 +604,9 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
             </View>
           )}
 
-          <View style={[styles.themeContainer, Platform.OS === 'web' && styles.webBlockSpacing]}>
+          {Platform.OS === 'web' && (
+            <>
+          <View style={[styles.themeContainer, styles.webBlockSpacing]}>
             <View style={styles.themeHeader}>
               <View style={styles.themeHeaderLeft}>
                 <Palette size={20} color={theme.primary} strokeWidth={1.5} />
@@ -556,74 +639,8 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
               </TouchableOpacity>
             </View>
           </View>
-
-          {Platform.OS !== 'web' && (
-          <View style={styles.sectorsContainer}>
-            <View style={styles.sectorsHeader}>
-              <View style={styles.sectorsHeaderLeft}>
-                <Tag size={20} color={theme.primary} strokeWidth={1.5} />
-                <Text style={styles.sectorsTitle}>{t.profile.sectors}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowAddModal(true)}
-                activeOpacity={0.7}
-              >
-                <Plus size={18} color={theme.primary} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.sectorsList}>
-              {sectors.map((sector) => (
-                <View key={sector} style={styles.sectorItem}>
-                  <Text style={styles.sectorName}>{sector.toUpperCase()}</Text>
-                  <View style={styles.sectorActions}>
-                    <TouchableOpacity
-                      onPress={() => handleEditSector(sector)}
-                      activeOpacity={0.7}
-                      style={styles.sectorActionButton}
-                    >
-                      <Edit2 size={14} color={theme.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteSector(sector)}
-                      activeOpacity={0.7}
-                      style={styles.sectorActionButton}
-                    >
-                      <Trash2 size={14} color={theme.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
+            </>
           )}
-
-          <View style={styles.backupContainer}>
-            <View style={styles.backupHeader}>
-              <View style={styles.backupHeaderLeft}>
-                <Shield size={20} color={theme.primary} strokeWidth={1.5} />
-                <Text style={styles.backupTitle}>{t.profile.backup}</Text>
-              </View>
-            </View>
-            <View style={styles.backupButtons}>
-              <TouchableOpacity
-                style={styles.backupButton}
-                onPress={handleCreateBackup}
-                activeOpacity={0.7}
-              >
-                <Download size={18} color={theme.primary} />
-                <Text style={styles.backupButtonText}>{t.profile.createBackup}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.backupButton}
-                onPress={handleRestoreBackup}
-                activeOpacity={0.7}
-              >
-                <Upload size={18} color={theme.primary} />
-                <Text style={styles.backupButtonText}>{t.profile.restoreBackup}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
 
           <TouchableOpacity
             style={styles.tutorialButton}
@@ -632,6 +649,15 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
           >
             <BookOpen size={20} color={theme.primary} />
             <Text style={styles.tutorialText}>{t.tutorial.startTutorial}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.supportButton}
+            onPress={() => Linking.openURL('https://t.me/spy_book')}
+            activeOpacity={0.7}
+          >
+            <MessageCircle size={20} color={theme.primary} />
+            <Text style={styles.supportText}>{currentLanguage === 'ru' ? 'ПОДДЕРЖКА' : 'SUPPORT'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -975,6 +1001,10 @@ const createStyles = (theme: any) => StyleSheet.create({
   mobileClearanceBlock: {
     minHeight: 180,
   },
+  mobilePhoneLast3: {
+    fontSize: 48,
+    minWidth: 60,
+  },
   webProfileColRight: {
     flex: 1,
     alignItems: 'center' as const,
@@ -1054,6 +1084,24 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginBottom: 12,
   },
   tutorialText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  supportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: theme.primary,
+    backgroundColor: theme.overlay,
+    paddingVertical: 16,
+    gap: 12,
+    marginBottom: 12,
+  },
+  supportText: {
     fontSize: 14,
     fontWeight: '700' as const,
     color: theme.primary,

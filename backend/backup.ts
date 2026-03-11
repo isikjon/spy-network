@@ -31,8 +31,14 @@ function getDataDir(): string {
 function getStorePath(): string {
   const dataDir = getDataDir();
   const dbPath = path.join(dataDir, "store.db");
-  if (fs.existsSync(dbPath)) return dbPath;
-  return path.join(dataDir, "store.json");
+  const jsonPath = path.join(dataDir, "store.json");
+
+  if (fs.existsSync(dbPath)) {
+    const stat = fs.statSync(dbPath);
+    if (stat.size > 0) return dbPath;
+    console.log("[backup] store.db exists but is empty, using store.json");
+  }
+  return jsonPath;
 }
 
 function getBackupDir(): string {
@@ -313,6 +319,14 @@ async function createBackup(): Promise<void> {
       console.log("[backup] store not found at", storePath, "skipping");
       return;
     }
+
+    const storeSize = fs.statSync(storePath).size;
+    if (storeSize === 0) {
+      console.log("[backup] store file is empty (0 bytes) at", storePath, "skipping");
+      return;
+    }
+    console.log("[backup] store file:", storePath, "size:", Math.round(storeSize / 1024), "KB");
+
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 
     const dateStr = formatDate(new Date());
@@ -348,8 +362,22 @@ async function createBackup(): Promise<void> {
       filesToSend.push({ path: jsonBackupPath, name: jsonBackupName });
     }
 
+    const validFiles = filesToSend.filter((f) => {
+      const size = fs.statSync(f.path).size;
+      if (size === 0) {
+        console.warn("[backup] skipping empty file:", f.name);
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length === 0) {
+      console.warn("[backup] all backup files are empty, nothing to send");
+      return;
+    }
+
     for (const chatId of subscribers) {
-      for (const f of filesToSend) {
+      for (const f of validFiles) {
         const ok = await sendFileToChat(chatId, f.path, f.name);
         if (!ok) console.warn("[backup] failed to send", f.name, "to", chatId);
       }
@@ -383,13 +411,28 @@ let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startBackupScheduler(): void {
   const token = getBotToken();
-  console.log("[backup] scheduler started, interval: 4h, bot:", token ? "configured" : "NOT configured");
+  const storePath = getStorePath();
+  const storeExists = fs.existsSync(storePath);
+  const storeSize = storeExists ? fs.statSync(storePath).size : 0;
+
+  console.log("[backup] scheduler started", {
+    interval: "4h",
+    bot: token ? "configured" : "NOT configured (set TG_BACKUP_BOT_TOKEN)",
+    storePath,
+    storeExists,
+    storeSizeKB: Math.round(storeSize / 1024),
+    dataDir: getDataDir(),
+  });
+
+  if (!token) {
+    console.warn("[backup] TG_BACKUP_BOT_TOKEN not set — Telegram backup bot DISABLED");
+  }
 
   loadSubscribers();
 
   if (token) {
     pollInterval = setInterval(pollUpdates, POLL_INTERVAL_MS);
-    console.log("[backup] Telegram polling started");
+    console.log("[backup] Telegram polling started, subscribers:", subscribers.size);
   }
 
   setTimeout(() => {
