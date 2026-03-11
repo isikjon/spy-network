@@ -26,7 +26,8 @@ type ProfileScreenProps = {
 };
 
 export default function ProfileScreen({ embedded }: ProfileScreenProps) {
-  const { phoneNumber, logout, dossiers, sectors, addSector, removeSector, updateSector, theme, currentTheme, switchTheme, t, currentLanguage, switchLanguage, resetTutorial, createBackup, restoreBackup, subscriptionLevel, changeSubscription } = useApp();
+  const { phoneNumber, logout, dossiers, sectors, addSector, removeSector, updateSector, theme, currentTheme, switchTheme, t, currentLanguage, switchLanguage, resetTutorial, createBackup, restoreBackup, subscriptionLevel } = useApp();
+  const trpcUtils = trpc.useUtils();
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -38,10 +39,12 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [cardDeleteLoading, setCardDeleteLoading] = useState(false);
+  const [cancelSubscriptionLoading, setCancelSubscriptionLoading] = useState(false);
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
 
   const createPaymentMutation = trpc.payment.createPayment.useMutation();
   const deleteCardMutation = trpc.payment.deleteCard.useMutation();
+  const cancelSubscriptionMutation = trpc.payment.cancelSubscription.useMutation();
   const deleteAccountMutation = trpc.appData.deleteMyAccount.useMutation();
   const cardInfoQuery = trpc.payment.getCardInfo.useQuery(undefined, { enabled: !!phoneNumber });
 
@@ -84,6 +87,34 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
               Alert.alert('Ошибка', 'Не удалось отвязать карту. Попробуйте позже.');
             } finally {
               setCardDeleteLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCancelSubscription = () => {
+    Alert.alert(
+      t.profile.subscriptionCancelConfirmTitle,
+      t.profile.subscriptionCancelConfirmMessage,
+      [
+        { text: t.profile.cancel, style: 'cancel' },
+        {
+          text: t.profile.subscriptionConfirm,
+          style: 'destructive',
+          onPress: async () => {
+            setCancelSubscriptionLoading(true);
+            try {
+              await cancelSubscriptionMutation.mutateAsync();
+              await Promise.all([
+                cardInfoQuery.refetch(),
+                trpcUtils.appData.getMyData.invalidate(),
+              ]);
+            } catch {
+              Alert.alert('Ошибка', 'Не удалось отменить подписку. Попробуйте позже.');
+            } finally {
+              setCancelSubscriptionLoading(false);
             }
           },
         },
@@ -542,53 +573,48 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                       </TouchableOpacity>
                     </>
                   ) : (
-                    <TouchableOpacity
-                      style={styles.cancelSubscriptionButton}
-                      onPress={() => {
-                        Alert.alert(
-                          t.profile.subscriptionCancelConfirmTitle,
-                          t.profile.subscriptionCancelConfirmMessage,
-                          [
-                            { text: t.profile.cancel, style: 'cancel' },
-                            {
-                              text: t.profile.subscriptionConfirm,
-                              style: 'destructive',
-                              onPress: () => changeSubscription('basic'),
-                            },
-                          ]
-                        );
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.cancelSubscriptionText}>{t.profile.subscriptionCancel}</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {/* Блок карты — показывается всегда когда карта сохранена */}
-                  {cardInfoQuery.data?.ok && cardInfoQuery.data.card && (
-                    <View style={styles.savedCardBlock}>
-                      <Text style={styles.savedCardLabel}>КАРТА ДЛЯ АВТОПРОДЛЕНИЯ</Text>
-                      <View style={styles.savedCardRow}>
-                        <Text style={styles.savedCardNumber}>
-                          {cardInfoQuery.data.card.cardType} •••• {cardInfoQuery.data.card.cardLast4}
-                        </Text>
-                        <TouchableOpacity
-                          onPress={handleDeleteCard}
-                          disabled={cardDeleteLoading}
-                          activeOpacity={0.7}
-                          style={styles.deleteCardButton}
-                        >
-                          <Text style={styles.deleteCardText}>
-                            {cardDeleteLoading ? '...' : 'ОТВЯЗАТЬ'}
+                    <>
+                      {/* Карта есть — автопродление активно, можно отменить */}
+                      {cardInfoQuery.data?.ok && cardInfoQuery.data.card ? (
+                        <>
+                          <View style={styles.savedCardBlock}>
+                            <Text style={styles.savedCardLabel}>КАРТА ДЛЯ АВТОПРОДЛЕНИЯ</Text>
+                            <View style={styles.savedCardRow}>
+                              <Text style={styles.savedCardNumber}>
+                                {cardInfoQuery.data.card.cardType} •••• {cardInfoQuery.data.card.cardLast4}
+                              </Text>
+                            </View>
+                            {cardInfoQuery.data.subscribedUntil && (
+                              <Text style={styles.nextBillingText}>
+                                {'СЛЕДУЮЩЕЕ СПИСАНИЕ: ' + new Date(cardInfoQuery.data.subscribedUntil).toLocaleDateString('ru-RU')}
+                              </Text>
+                            )}
+                          </View>
+                          <TouchableOpacity
+                            style={[styles.cancelSubscriptionButton, cancelSubscriptionLoading && { opacity: 0.6 }]}
+                            onPress={handleCancelSubscription}
+                            activeOpacity={0.7}
+                            disabled={cancelSubscriptionLoading}
+                          >
+                            <Text style={styles.cancelSubscriptionText}>
+                              {cancelSubscriptionLoading ? '...' : t.profile.subscriptionCancel}
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        /* Карты нет — автопродление уже отключено, доступ до конца периода */
+                        <View style={styles.autoRenewCanceledBlock}>
+                          <Text style={styles.autoRenewCanceledText}>
+                            {currentLanguage === 'ru' ? 'АВТОПРОДЛЕНИЕ ОТКЛЮЧЕНО' : 'AUTO-RENEWAL DISABLED'}
                           </Text>
-                        </TouchableOpacity>
-                      </View>
-                      {cardInfoQuery.data.subscribedUntil && (
-                        <Text style={styles.nextBillingText}>
-                          {'СЛЕДУЮЩЕЕ СПИСАНИЕ: ' + new Date(cardInfoQuery.data.subscribedUntil).toLocaleDateString('ru-RU')}
-                        </Text>
+                          {cardInfoQuery.data?.ok && cardInfoQuery.data.subscribedUntil && (
+                            <Text style={styles.autoRenewAccessUntilText}>
+                              {(currentLanguage === 'ru' ? 'ДОСТУП ДО: ' : 'ACCESS UNTIL: ') + new Date(cardInfoQuery.data.subscribedUntil).toLocaleDateString('ru-RU')}
+                            </Text>
+                          )}
+                        </View>
                       )}
-                    </View>
+                    </>
                   )}
                 </View>
               </View>
@@ -1558,6 +1584,28 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontFamily: 'monospace' as const,
     letterSpacing: 1,
     marginTop: 6,
+  },
+  autoRenewCanceledBlock: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  autoRenewCanceledText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  autoRenewAccessUntilText: {
+    fontSize: 9,
+    color: theme.primaryDim,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
   },
   clearanceInline: {
     width: '100%',

@@ -23,7 +23,6 @@ const STORAGE_KEYS = {
   LANGUAGE: 'app_language',
   TUTORIAL_COMPLETED: 'tutorial_completed',
   APP_DATA_CACHE: 'app_data_cache_v1',
-  SUBSCRIPTION: 'subscription_level',
 
   LEGACY_DOSSIERS: 'contact_dossiers',
   LEGACY_SECTORS: 'user_sectors',
@@ -109,14 +108,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     },
   });
 
-  const subscriptionQuery = useQuery({
-    queryKey: ['subscription'],
-    queryFn: async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEYS.SUBSCRIPTION);
-      return (stored as SubscriptionLevel) || 'basic';
-    },
-  });
-
   const cacheQuery = useQuery({
     queryKey: ['appDataCache'],
     queryFn: async (): Promise<AppDataCache | null> => {
@@ -170,18 +161,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       return completed;
     },
   });
-
-  const { mutate: saveSubscription } = useMutation({
-    mutationFn: async (level: SubscriptionLevel) => {
-      await AsyncStorage.setItem(STORAGE_KEYS.SUBSCRIPTION, level);
-      return level;
-    },
-  });
-
-  const changeSubscription = useCallback((level: SubscriptionLevel) => {
-    setSubscriptionLevel(level);
-    saveSubscription(level);
-  }, [saveSubscription]);
 
   const persistAppDataCache = useCallback(async (next: AppDataCache) => {
     try {
@@ -238,12 +217,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [tutorialQuery.data]);
 
   useEffect(() => {
-    if (subscriptionQuery.data && !appDataQuery.data) {
-      setSubscriptionLevel(subscriptionQuery.data);
-    }
-  }, [subscriptionQuery.data, appDataQuery.data]);
-
-  useEffect(() => {
     if (cacheQuery.data) {
       console.log('[AppContext] hydrate from cache', {
         dossiers: cacheQuery.data.dossiers.length,
@@ -271,8 +244,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (typeof serverLevelNum === 'number') {
         const serverLevel: SubscriptionLevel = serverLevelNum >= 2 ? 'working' : 'basic';
         setSubscriptionLevel(serverLevel);
-        AsyncStorage.setItem(STORAGE_KEYS.SUBSCRIPTION, serverLevel).catch(() => {});
-        queryClient.setQueryData(['subscription'], serverLevel);
       }
 
       applyAppData({
@@ -385,6 +356,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     setDossiers([]);
     setSectors(DEFAULT_SECTORS);
     setPowerGroupings(DEFAULT_POWER_GROUPINGS);
+    setSubscriptionLevel('basic');
     setSelfContactEnsuredForPhone(null);
 
     await AsyncStorage.multiRemove([
@@ -772,7 +744,6 @@ export const [AppProvider, useApp] = createContextHook(() => {
     restoreBackup,
 
     subscriptionLevel,
-    changeSubscription,
   };
 });
 

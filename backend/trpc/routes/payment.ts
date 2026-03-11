@@ -270,6 +270,23 @@ export const paymentRouter = createTRPCRouter({
     console.log("[payment] card deleted for", ctx.userPhone);
     return { ok: true as const };
   }),
+
+  /**
+   * Отменить автопродление подписки.
+   *
+   * Уровень 2 остаётся активным до истечения оплаченного периода (subscribedUntil).
+   * Карта удаляется — автосписание не произойдёт.
+   * Когда subscribedUntil истечёт, getUserLevel сам понизит уровень до 1.
+   */
+  cancelSubscription: publicProcedure.mutation(async ({ ctx }) => {
+    if (!ctx.userPhone) {
+      return { ok: false as const, error: "UNAUTHENTICATED" as const };
+    }
+
+    await storeDelete(cardKey(ctx.userPhone));
+    console.log("[payment] auto-renewal canceled (card removed), access remains until period ends", ctx.userPhone);
+    return { ok: true as const };
+  }),
 });
 
 /**
