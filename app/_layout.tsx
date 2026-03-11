@@ -11,12 +11,42 @@ import LoadingScreen from "@/components/LoadingScreen";
 import Tutorial from "@/components/Tutorial";
 import { trpc, trpcClient } from "@/lib/trpc";
 
+let adsInitialized = false;
+
+function initYandexAds() {
+  if (adsInitialized || Platform.OS === 'web') return;
+  adsInitialized = true;
+  try {
+    const { MobileAds } = require('yandex-mobile-ads');
+    MobileAds.initialize();
+    console.log('[ads] Yandex Mobile Ads initialized');
+  } catch (e) {
+    console.warn('[ads] Failed to init Yandex Ads:', e);
+  }
+}
+
+let appOpenShown = false;
+async function showAppOpenAd() {
+  if (Platform.OS === 'web' || appOpenShown) return;
+  appOpenShown = true;
+  try {
+    const { AppOpenAdLoader, AdRequestConfiguration } = require('yandex-mobile-ads');
+    const loader = await AppOpenAdLoader.create();
+    const config = new AdRequestConfiguration({ adUnitId: 'R-M-18890253-1' });
+    const ad = await loader.loadAd(config);
+    await ad.show();
+    console.log('[ads] App Open ad shown');
+  } catch (e) {
+    console.warn('[ads] App Open ad error:', e);
+  }
+}
+
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  const { isAuthenticated, isLoading, theme, tutorialCompleted, completeTutorial, t } = useApp();
+  const { isAuthenticated, isLoading, theme, tutorialCompleted, completeTutorial, t, subscriptionLevel } = useApp();
   const segments = useSegments();
   const router = useRouter();
   const rootNavState = useRootNavigationState();
@@ -48,6 +78,9 @@ function RootLayoutNav() {
       hasNavigated.current = true;
       setTimeout(() => {
         router.replace('/(tabs)');
+        if (subscriptionLevel !== 'working') {
+          setTimeout(showAppOpenAd, 1500);
+        }
       }, 0);
     }
 
@@ -108,6 +141,7 @@ function RootLayoutNav() {
 export default function RootLayout() {
   useEffect(() => {
     SplashScreen.hideAsync();
+    initYandexAds();
 
     if (Platform.OS === "android") {
       NavigationBar.setBackgroundColorAsync("rgba(0,0,0,0.01)");

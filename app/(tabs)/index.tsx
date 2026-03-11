@@ -1,4 +1,5 @@
 import { useApp } from '@/contexts/AppContext';
+import { getInlineAdPositions, shouldShowInterstitial } from '@/lib/ads';
 import { router } from 'expo-router';
 import {
   BookOpen,
@@ -37,6 +38,34 @@ import { ContactDossier } from '@/types';
 import NetworkScreen from './network';
 import ProfileScreen from './profile';
 
+import { NativeAdBlock } from '@/components/NativeAdBlock';
+import { YandexBanner } from '@/components/YandexBanner';
+
+let AdRequestConfigClass: any = null;
+let InterstitialAdLoaderClass: any = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    const yma = require('yandex-mobile-ads');
+    AdRequestConfigClass = yma.AdRequestConfiguration;
+    InterstitialAdLoaderClass = yma.InterstitialAdLoader;
+  } catch (e) {
+    console.warn('[ads] yandex-mobile-ads not available');
+  }
+}
+
+async function showInterstitialAd() {
+  if (!InterstitialAdLoaderClass || !AdRequestConfigClass) return;
+  try {
+    const loader = await InterstitialAdLoaderClass.create();
+    const config = new AdRequestConfigClass({ adUnitId: ADS_CONFIG.INTERSTITIAL_ID });
+    const ad = await loader.loadAd(config);
+    await ad.show();
+  } catch (e) {
+    console.warn('[ads] interstitial error:', e);
+  }
+}
+
 type OpenDossierHandler = (payload: { id: string; edit?: boolean }) => void;
 
 function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) {
@@ -46,6 +75,7 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
   const [phoneContacts, setPhoneContacts] = useState<any[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   const styles = createStyles(theme);
 
@@ -68,6 +98,25 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
     );
   });
 
+  const listWithAds = useMemo(() => {
+    const showAds = subscriptionLevel !== 'working' && Platform.OS !== 'web';
+    if (!showAds || filteredDossiers.length < 4) {
+      return filteredDossiers.map((d, i) => ({ type: 'dossier' as const, data: d, originalIndex: i }));
+    }
+    const adPositions = new Set(getInlineAdPositions(filteredDossiers.length));
+    const result: Array<
+      | { type: 'dossier'; data: ContactDossier; originalIndex: number }
+      | { type: 'ad'; slotIndex: number }
+    > = [];
+    filteredDossiers.forEach((d, i) => {
+      result.push({ type: 'dossier', data: d, originalIndex: i });
+      if (adPositions.has(i)) {
+        result.push({ type: 'ad', slotIndex: result.filter((x) => x.type === 'ad').length });
+      }
+    });
+    return result;
+  }, [filteredDossiers, subscriptionLevel]);
+
   const loadContacts = async () => {
     if (Platform.OS === 'web') {
       Alert.alert(t.dossiers.notAvailable, t.dossiers.contactAccessWeb);
@@ -77,12 +126,16 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
     setIsLoadingContacts(true);
     try {
       const Contacts = await import('expo-contacts');
-      const { status } = await Contacts.requestPermissionsAsync();
+      let status = (await Contacts.getPermissionsAsync()).status;
+      if (status !== 'granted') {
+        const { status: requested } = await Contacts.requestPermissionsAsync();
+        status = requested;
+      }
       if (status === 'granted') {
         const { data } = await Contacts.getContactsAsync({
-          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Image, Contacts.Fields.Company, Contacts.Fields.JobTitle],
+          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Company, Contacts.Fields.JobTitle],
         });
-        setPhoneContacts(data);
+        setPhoneContacts(data || []);
         setShowContactsModal(true);
       } else {
         Alert.alert(t.dossiers.permissionDenied, t.dossiers.contactPermissionRequired);
@@ -124,19 +177,7 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
     if (!result.ok && result.error === 'LIMIT_EXCEEDED') {
       setShowContactsModal(false);
       setContactSearch('');
-      Alert.alert(
-        'ЛИМИТ КОНТАКТОВ',
-        'Ваш УРОВЕНЬ ДОПУСКА: 1. Лимит контактов: 20. Войдите в Ваш профиль на WEB странице системы, для повышения уровня допуска.',
-        [
-          { text: 'Закрыть', style: 'cancel' },
-          {
-            text: 'Профиль',
-            onPress: () => {
-              router.push('/(tabs)/profile' as any);
-            },
-          },
-        ],
-      );
+      setShowLimitModal(true);
       return;
     }
     if (!result.ok && result.error === 'DUPLICATE') {
@@ -186,17 +227,20 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
   const isOverLimit = subscriptionLevel !== 'working' && dossiers.length > 20;
 
   const showLimitAlert = () => {
-    Alert.alert(
-      'ЛИМИТ КОНТАКТОВ',
-      'Ваш УРОВЕНЬ ДОПУСКА: 1. Лимит контактов: 20. Войдите в Ваш профиль на WEB странице системы, для повышения уровня допуска.',
-      [
-        { text: 'Закрыть', style: 'cancel' },
-        {
-          text: 'Профиль',
-          onPress: () => router.push('/(tabs)/profile' as any),
-        },
-      ],
-    );
+    setShowLimitModal(true);
+  };
+
+  const renderListItem = ({
+    item,
+  }: {
+    item:
+      | { type: 'dossier'; data: ContactDossier; originalIndex: number }
+      | { type: 'ad'; slotIndex: number };
+  }) => {
+    if (item.type === 'ad') {
+      return <NativeAdBlock />;
+    }
+    return renderDossier({ item: item.data, index: item.originalIndex });
   };
 
   const renderDossier = ({ item, index }: { item: ContactDossier; index: number }) => {
@@ -244,6 +288,9 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
       <TouchableOpacity
         style={styles.dossierCard}
         onPress={() => {
+          if (subscriptionLevel !== 'working' && shouldShowInterstitial()) {
+            showInterstitialAd();
+          }
           if (onOpenDossier) {
             onOpenDossier({ id: item.contact.id });
           } else {
@@ -336,11 +383,18 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
         ) : (
           <>
             <FlatList
-              data={filteredDossiers}
-              renderItem={renderDossier}
-              keyExtractor={(item) => item.contact.id}
+              data={listWithAds}
+              renderItem={renderListItem}
+              keyExtractor={(item) =>
+                item.type === 'dossier' ? item.data.contact.id : `ad_${item.slotIndex}`
+              }
               contentContainerStyle={styles.list}
               showsVerticalScrollIndicator={false}
+              ListFooterComponent={
+                subscriptionLevel !== 'working' && Platform.OS !== 'web' ? (
+                  <YandexBanner />
+                ) : null
+              }
             />
             <View style={styles.fabContainer}>
               <TouchableOpacity
@@ -358,6 +412,44 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
             </View>
           </>
         )}
+
+        <Modal
+          visible={showLimitModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowLimitModal(false)}
+        >
+          <View style={styles.limitModalBackdrop}>
+            <View style={styles.limitModalBox}>
+              <Shield size={32} color={theme.danger} strokeWidth={1.5} />
+              <Text style={styles.limitModalTitle}>ЛИМИТ КОНТАКТОВ</Text>
+              <Text style={styles.limitModalText}>
+                Ваш УРОВЕНЬ ДОПУСКА: 1.{'\n'}
+                Лимит контактов: 20.{'\n'}
+                Войдите в Ваш профиль на WEB странице системы, для повышения уровня допуска.
+              </Text>
+              <View style={styles.limitModalButtons}>
+                <TouchableOpacity
+                  style={styles.limitModalBtnCancel}
+                  onPress={() => setShowLimitModal(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.limitModalBtnCancelText}>ЗАКРЫТЬ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.limitModalBtnAction}
+                  onPress={() => {
+                    setShowLimitModal(false);
+                    router.push('/(tabs)/profile' as any);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.limitModalBtnActionText}>ПРОФИЛЬ</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         <Modal
           visible={showContactsModal}
@@ -392,8 +484,8 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
               </View>
 
               <FlatList
-                data={phoneContacts.filter(c => 
-                  !contactSearch || 
+                data={phoneContacts.filter((c) =>
+                  !contactSearch ||
                   (c.name && c.name.toLowerCase().includes(contactSearch.toLowerCase())) ||
                   (c.phoneNumbers && c.phoneNumbers.some((p: any) => p.number?.includes(contactSearch))) ||
                   (c.emails && c.emails.some((e: any) => e.email?.toLowerCase().includes(contactSearch.toLowerCase())))
@@ -856,6 +948,74 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     color: theme.textSecondary,
     fontFamily: 'monospace' as const,
+  },
+  limitModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  limitModalBox: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: theme.card,
+    borderWidth: 2,
+    borderColor: theme.danger,
+    padding: 28,
+    alignItems: 'center',
+  },
+  limitModalTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: theme.danger,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 3,
+    marginTop: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  limitModalText: {
+    fontSize: 13,
+    color: theme.text,
+    fontFamily: 'monospace' as const,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  limitModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  limitModalBtnCancel: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: theme.border,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  limitModalBtnCancelText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.textSecondary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+  },
+  limitModalBtnAction: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: theme.primary,
+    backgroundColor: theme.overlay,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  limitModalBtnActionText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
   },
 });
 

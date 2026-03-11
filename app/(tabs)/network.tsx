@@ -1,3 +1,4 @@
+import { YandexBanner } from '@/components/YandexBanner';
 import { useApp } from '@/contexts/AppContext';
 import { Network as NetworkIcon, Circle } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -90,7 +91,7 @@ function WebWheelBlocker({ children, style, testID, isActiveRef, onWheelZoom }: 
 }
 
 export default function NetworkScreen({ onOpenDossier }: NetworkScreenProps) {
-  const { dossiers, sectors, theme, powerGroupings, t, currentTheme } = useApp();
+  const { dossiers, sectors, theme, powerGroupings, t, currentTheme, subscriptionLevel } = useApp();
   const router = useRouter();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
@@ -1222,6 +1223,8 @@ export default function NetworkScreen({ onOpenDossier }: NetworkScreenProps) {
                     </View>
                   </View>
                 </View>
+
+                {subscriptionLevel !== 'working' && <YandexBanner />}
               </>
             )}
           </ScrollView>

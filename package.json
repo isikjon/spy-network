@@ -12,7 +12,8 @@
     "lint": "expo lint",
     "backend": "bun run backend/server.ts",
     "backend:dev": "bun --watch run backend/server.ts",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "build:apk": "export JAVA_HOME=\"/opt/homebrew/opt/openjdk@17\" && export PATH=\"$JAVA_HOME/bin:$PATH\" && export ANDROID_HOME=\"$HOME/Library/Android/sdk\" && export PATH=\"$ANDROID_HOME/platform-tools:$ANDROID_HOME/tools:$PATH\" && eas build --platform android --profile preview --local"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -63,6 +64,7 @@
     "react-native-web": "^0.21.0",
     "react-native-worklets": "0.5.1",
     "superjson": "1.12.2",
+    "yandex-mobile-ads": "^7.18.0",
     "zod": "^4.3.5",
     "zustand": "^5.0.2"
   },

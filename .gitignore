@@ -12,6 +12,8 @@ expo-env.d.ts
 # Native
 ios/
 android/
+*.apk
+build-*.apk
 *.orig.*
 *.jks
 credentials.json

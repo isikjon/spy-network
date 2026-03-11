@@ -1,3 +1,4 @@
+import { YandexBanner } from '@/components/YandexBanner';
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { Redirect, router } from 'expo-router';
@@ -249,25 +250,20 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
             </View>
           ) : (
             <>
-              <View style={styles.profileCard}>
-                <View style={styles.mobileProfileRow}>
-                  <View style={styles.mobileProfileLeft}>
+              <View style={[styles.profileCard, styles.mobileClearanceBlock]}>
+                <View style={styles.webProfileRow}>
+                  <View style={styles.webProfileColLeft}>
                     <View style={styles.avatar}>
                       <Shield size={48} color={theme.primary} strokeWidth={1.5} />
                     </View>
+                    <Text style={styles.webClearanceLabel}>{t.profile.clearanceSection || 'ДОПУСК'}</Text>
                   </View>
-                  <View style={styles.mobileProfileRight}>
-                    <View style={styles.phoneContainer}>
-                      <Phone size={16} color={theme.primaryDim} />
-                      <Text style={styles.phoneText}>{phoneNumber}</Text>
+                  <View style={styles.webProfileColRight}>
+                    <View style={styles.webPhoneLast3Wrap}>
+                      <Text style={styles.webPhoneLast3}>{phoneNumber ? phoneNumber.slice(-3) : '---'}</Text>
                     </View>
+                    <Text style={styles.webClearanceLevel}>УРОВЕНЬ {subscriptionLevel === 'working' ? '2' : '1'}</Text>
                   </View>
-                </View>
-                <View style={styles.mobileProfileLabels}>
-                  <Text style={styles.mobileProfileLabelLeft}>ДОПУСК</Text>
-                  <Text style={styles.mobileProfileLabelRight}>
-                    {subscriptionLevel === 'working' ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1'}
-                  </Text>
                 </View>
               </View>
 
@@ -346,6 +342,10 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                 </View>
               )}
             </View>
+          )}
+
+          {Platform.OS !== 'web' && subscriptionLevel !== 'working' && (
+            <YandexBanner />
           )}
 
           {Platform.OS === 'web' && (
@@ -971,6 +971,9 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   webProfileColLeft: {
     alignItems: 'center' as const,
+  },
+  mobileClearanceBlock: {
+    minHeight: 180,
   },
   webProfileColRight: {
     flex: 1,
