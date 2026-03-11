@@ -141,10 +141,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const appDataQuery = trpc.appData.getMyData.useQuery(undefined, {
     enabled: !!phoneNumber,
-    staleTime: 10_000,
-    refetchInterval: 30_000,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   const saveMyDataMutation = trpc.appData.saveMyData.useMutation();
@@ -237,10 +238,10 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [tutorialQuery.data]);
 
   useEffect(() => {
-    if (subscriptionQuery.data) {
+    if (subscriptionQuery.data && !appDataQuery.data) {
       setSubscriptionLevel(subscriptionQuery.data);
     }
-  }, [subscriptionQuery.data]);
+  }, [subscriptionQuery.data, appDataQuery.data]);
 
   useEffect(() => {
     if (cacheQuery.data) {
