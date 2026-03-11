@@ -270,7 +270,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
       if (typeof serverLevelNum === 'number') {
         const serverLevel: SubscriptionLevel = serverLevelNum >= 2 ? 'working' : 'basic';
         setSubscriptionLevel(serverLevel);
-        saveSubscription(serverLevel);
+        AsyncStorage.setItem(STORAGE_KEYS.SUBSCRIPTION, serverLevel).catch(() => {});
+        queryClient.setQueryData(['subscription'], serverLevel);
       }
 
       applyAppData({
@@ -282,7 +283,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         updatedAt: typeof data?.updatedAt === 'number' ? data.updatedAt : Date.now(),
       });
     }
-  }, [appDataQuery.data, applyAppData]);
+  }, [appDataQuery.data, applyAppData, queryClient]);
 
   useEffect(() => {
     const migrateIfNeeded = async () => {

@@ -45,6 +45,15 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
   const deleteAccountMutation = trpc.appData.deleteMyAccount.useMutation();
   const cardInfoQuery = trpc.payment.getCardInfo.useQuery(undefined, { enabled: !!phoneNumber });
 
+  const effectiveSubscriptionLevel = (() => {
+    if (subscriptionLevel === 'working') return 'working' as const;
+    if (cardInfoQuery.data?.ok && cardInfoQuery.data.subscribedUntil && cardInfoQuery.data.subscribedUntil > Date.now()) {
+      changeSubscription('working');
+      return 'working' as const;
+    }
+    return subscriptionLevel;
+  })();
+
   const handleSubscribe = async () => {
     setPaymentLoading(true);
     setPaymentError(null);
@@ -276,7 +285,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                   <View style={styles.webPhoneLast3Wrap}>
                     <Text style={styles.webPhoneLast3}>{phoneNumber ? (phoneNumber.replace(/\D/g, '')).slice(-3) || '---' : '---'}</Text>
                   </View>
-                  <Text style={styles.webClearanceLevel}>УРОВЕНЬ {subscriptionLevel === 'working' ? '2' : '1'}</Text>
+                  <Text style={styles.webClearanceLevel}>УРОВЕНЬ {effectiveSubscriptionLevel === 'working' ? '2' : '1'}</Text>
                 </View>
               </View>
             </View>
@@ -300,7 +309,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                         })()}
                       </Text>
                     </View>
-                    <Text style={styles.webClearanceLevel}>УРОВЕНЬ {subscriptionLevel === 'working' ? '2' : '1'}</Text>
+                    <Text style={styles.webClearanceLevel}>УРОВЕНЬ {effectiveSubscriptionLevel === 'working' ? '2' : '1'}</Text>
                   </View>
                 </View>
               </View>
@@ -430,23 +439,23 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
               <View style={styles.mobileInfoRow}>
                 <Text style={styles.mobileInfoLabel}>ДОПУСК</Text>
                 <Text style={styles.mobileInfoValue}>
-                  {subscriptionLevel === 'working' ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1'}
+                  {effectiveSubscriptionLevel === 'working' ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1'}
                 </Text>
               </View>
               <View style={styles.mobileInfoRow}>
                 <Text style={styles.mobileInfoLabel}>КОНТАКТЫ</Text>
                 <Text style={[
                   styles.mobileInfoValue,
-                  subscriptionLevel !== 'working' && dossiers.length >= 20 && { color: theme.danger },
+                  effectiveSubscriptionLevel !== 'working' && dossiers.length >= 20 && { color: theme.danger },
                 ]}>
-                  {subscriptionLevel === 'working' ? `${dossiers.length} / ∞` : `${dossiers.length} / 20`}
+                  {effectiveSubscriptionLevel === 'working' ? `${dossiers.length} / ∞` : `${dossiers.length} / 20`}
                 </Text>
               </View>
               <View style={styles.mobileInfoRow}>
                 <Text style={styles.mobileInfoLabel}>ШИФРОВАНИЕ</Text>
                 <Text style={styles.mobileInfoValue}>AES-256</Text>
               </View>
-              {subscriptionLevel !== 'working' && (
+              {effectiveSubscriptionLevel !== 'working' && (
                 <View style={styles.mobileUpgradeBlock}>
                   <Text style={styles.mobileUpgradeTitle}>ПОВЫСИТЬ ДОПУСК</Text>
                   <Text style={styles.mobileUpgradeDesc}>
@@ -457,7 +466,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
             </View>
           )}
 
-          {Platform.OS !== 'web' && subscriptionLevel !== 'working' && (
+          {Platform.OS !== 'web' && effectiveSubscriptionLevel !== 'working' && (
             <YandexBanner />
           )}
 
@@ -470,13 +479,13 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                 </View>
                 <View style={[
                   styles.subscriptionBadge,
-                  subscriptionLevel === 'working' && styles.subscriptionBadgeActive,
+                  effectiveSubscriptionLevel === 'working' && styles.subscriptionBadgeActive,
                 ]}>
                   <Text style={[
                     styles.subscriptionBadgeText,
-                    subscriptionLevel === 'working' && styles.subscriptionBadgeTextActive,
+                    effectiveSubscriptionLevel === 'working' && styles.subscriptionBadgeTextActive,
                   ]}>
-                    {subscriptionLevel === 'working' ? (currentLanguage === 'ru' ? 'УРОВЕНЬ 2' : 'LEVEL 2') : (currentLanguage === 'ru' ? 'УРОВЕНЬ 1' : 'LEVEL 1')}
+                    {effectiveSubscriptionLevel === 'working' ? (currentLanguage === 'ru' ? 'УРОВЕНЬ 2' : 'LEVEL 2') : (currentLanguage === 'ru' ? 'УРОВЕНЬ 1' : 'LEVEL 1')}
                   </Text>
                 </View>
               </View>
@@ -484,14 +493,14 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
               <View style={styles.subscriptionPlans}>
                 <View style={[
                   styles.planCard,
-                  subscriptionLevel === 'basic' && styles.planCardActive,
+                  effectiveSubscriptionLevel === 'basic' && styles.planCardActive,
                 ]}>
                   <View style={styles.planHeader}>
                     <Text style={[
                       styles.planName,
-                      subscriptionLevel === 'basic' && styles.planNameActive,
+                      effectiveSubscriptionLevel === 'basic' && styles.planNameActive,
                     ]}>{currentLanguage === 'ru' ? 'УРОВЕНЬ 1' : 'LEVEL 1'}</Text>
-                    {subscriptionLevel === 'basic' && (
+                    {effectiveSubscriptionLevel === 'basic' && (
                       <View style={styles.currentPlanTag}>
                         <Text style={styles.currentPlanTagText}>{t.profile.subscriptionCurrentPlan}</Text>
                       </View>
@@ -504,14 +513,14 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                 <View style={[
                   styles.planCard,
                   styles.planCardPremium,
-                  subscriptionLevel === 'working' && styles.planCardActive,
+                  effectiveSubscriptionLevel === 'working' && styles.planCardActive,
                 ]}>
                   <View style={styles.planHeader}>
                     <Text style={[
                       styles.planName,
-                      subscriptionLevel === 'working' && styles.planNameActive,
+                      effectiveSubscriptionLevel === 'working' && styles.planNameActive,
                     ]}>{currentLanguage === 'ru' ? 'УРОВЕНЬ 2' : 'LEVEL 2'}</Text>
-                    {subscriptionLevel === 'working' && (
+                    {effectiveSubscriptionLevel === 'working' && (
                       <View style={styles.currentPlanTag}>
                         <Text style={styles.currentPlanTagText}>{t.profile.subscriptionActive}</Text>
                       </View>
@@ -523,7 +532,7 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
                     <Text style={styles.planAutoRenew}>{t.profile.subscriptionAutoRenew}</Text>
                   </View>
 
-                  {subscriptionLevel === 'basic' ? (
+                  {effectiveSubscriptionLevel === 'basic' ? (
                     <>
                       {paymentError && (
                         <Text style={{ color: theme.danger, fontFamily: 'monospace', fontSize: 11, marginBottom: 8, textAlign: 'center' }}>
