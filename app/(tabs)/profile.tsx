@@ -718,21 +718,19 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
             <Text style={styles.supportText}>{currentLanguage === 'ru' ? 'ПОДДЕРЖКА' : 'SUPPORT'}</Text>
           </TouchableOpacity>
 
-          {Platform.OS === 'web' && (
-            <TouchableOpacity
-              style={[styles.deleteAccountButton, deleteAccountLoading && { opacity: 0.6 }]}
-              onPress={handleDeleteAccount}
-              activeOpacity={0.7}
-              disabled={deleteAccountLoading}
-            >
-              <UserX size={20} color={theme.danger} />
-              <Text style={styles.deleteAccountText}>
-                {deleteAccountLoading
-                  ? '...'
-                  : currentLanguage === 'ru' ? 'УДАЛИТЬ АККАУНТ' : 'DELETE ACCOUNT'}
-              </Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.deleteAccountButton, deleteAccountLoading && { opacity: 0.6 }]}
+            onPress={handleDeleteAccount}
+            activeOpacity={0.7}
+            disabled={deleteAccountLoading}
+          >
+            <UserX size={20} color={theme.danger} />
+            <Text style={styles.deleteAccountText}>
+              {deleteAccountLoading
+                ? '...'
+                : currentLanguage === 'ru' ? 'УДАЛИТЬ АККАУНТ' : 'DELETE ACCOUNT'}
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.logoutButton}
