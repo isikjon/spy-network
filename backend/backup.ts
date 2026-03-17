@@ -393,11 +393,21 @@ async function cleanupOldBackups(): Promise<void> {
   const backupDir = getBackupDir();
   try {
     if (!fs.existsSync(backupDir)) return;
-    const files = fs.readdirSync(backupDir)
-      .filter((f) => (f.startsWith("store-backup-") || f.startsWith("spy-network-backup-")) && (f.endsWith(".json") || f.endsWith(".sql") || f.endsWith(".db") || f.endsWith(".db-wal")))
+    const allFiles = fs.readdirSync(backupDir)
+      .filter((f) => (f.startsWith("store-backup-") || f.startsWith("spy-network-backup-")) && (f.endsWith(".json") || f.endsWith(".sql") || f.endsWith(".db") || f.endsWith(".db-wal")));
+
+    // Delete legacy store-backup-* files entirely
+    for (const f of allFiles.filter((f) => f.startsWith("store-backup-"))) {
+      fs.unlinkSync(path.join(backupDir, f));
+      console.log(`[backup] deleted legacy: ${f}`);
+    }
+
+    // Keep only MAX_BACKUPS newest spy-network-backup-* files
+    const current = allFiles
+      .filter((f) => f.startsWith("spy-network-backup-"))
       .sort().reverse();
-    if (files.length <= MAX_BACKUPS) return;
-    for (const file of files.slice(MAX_BACKUPS)) {
+    if (current.length <= MAX_BACKUPS) return;
+    for (const file of current.slice(MAX_BACKUPS)) {
       fs.unlinkSync(path.join(backupDir, file));
       console.log(`[backup] deleted old: ${file}`);
     }
