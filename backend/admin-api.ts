@@ -134,7 +134,7 @@ adminApi.get("/admin-api/users", async (c) => {
       subscriptionStatus,
       paymentStatus,
       hasCard,
-      nextChargeAt: isActive ? accessUntil : null,
+      nextChargeAt: isActive && hasCard ? accessUntil : null,
       accessUntil,
     });
   }
