@@ -7,6 +7,8 @@ import {
   verifyAdminPassword,
 } from "./trpc/utils/admin-auth";
 import { createBackup } from "./backup";
+import { getUserLevel } from "./trpc/utils/user-level";
+import type { SavedCard } from "./trpc/routes/payment";
 
 type UserAppData = {
   phoneNumber: string;
@@ -14,6 +16,18 @@ type UserAppData = {
   sectors: string[];
   powerGroupings: string[];
   updatedAt: number;
+};
+
+type AdminUserRow = {
+  phoneNumber: string;
+  dossiersCount: number;
+  updatedAt: number;
+  level: number;
+  subscriptionStatus: "none" | "active" | "expired";
+  paymentStatus: "paid" | "unpaid";
+  hasCard: boolean;
+  nextChargeAt: number | null;
+  accessUntil: number | null;
 };
 
 const userKeyToPhone = (key: string): string | null => {
@@ -90,18 +104,132 @@ adminApi.get("/admin-api/users", async (c) => {
     .filter((p) => (query.length > 0 ? p.includes(query) : true))
     .slice(0, limit);
 
-  const users: { phoneNumber: string; dossiersCount: number; updatedAt: number }[] = [];
+  const users: AdminUserRow[] = [];
   for (const phone of phones) {
     const stored = await storeGet<UserAppData>(`user:${phone}:data`);
     if (!stored) continue;
+    const levelData = await getUserLevel(phone);
+    const card = await storeGet<SavedCard>(`user:${phone}:payment_method`);
+    const hasCard = !!card?.paymentMethodId;
+    const now = Date.now();
+    const accessUntil =
+      typeof levelData.subscribedUntil === "number" && levelData.subscribedUntil > 0
+        ? levelData.subscribedUntil
+        : null;
+    const isActive = levelData.level >= 2 && !!accessUntil && accessUntil > now;
+    const isExpired = levelData.level >= 2 && !!accessUntil && accessUntil <= now;
+
     users.push({
       phoneNumber: maskPhone(stored.phoneNumber || phone),
       dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
       updatedAt: typeof stored.updatedAt === "number" ? stored.updatedAt : 0,
+      level: levelData.level,
+      subscriptionStatus: isActive ? "active" : isExpired ? "expired" : "none",
+      paymentStatus: isActive || hasCard ? "paid" : "unpaid",
+      hasCard,
+      nextChargeAt: isActive ? accessUntil : null,
+      accessUntil: isActive ? accessUntil : null,
     });
   }
   users.sort((a, b) => b.updatedAt - a.updatedAt);
   return c.json({ ok: true, users, query });
+});
+
+adminApi.get("/admin-api/analytics/overview", async (c) => {
+  const user = await getAdminFromRequest(c.req.raw);
+  if (!user) {
+    return c.json({ ok: false, error: "UNAUTHENTICATED" }, 401);
+  }
+  if (user.role !== "admin" && user.role !== "analyst" && user.role !== "manager") {
+    return c.json({ ok: false, error: "FORBIDDEN" }, 403);
+  }
+
+  const keys = await storeListKeys("user:");
+  const dataKeys = keys.filter((k) => k.endsWith(":data"));
+  const phones = dataKeys
+    .map((k) => userKeyToPhone(k))
+    .filter((p): p is string => typeof p === "string" && p.length > 0);
+
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const day0 = startOfToday.getTime();
+
+  const activeUsersByDay: number[] = Array.from({ length: 7 }, () => 0);
+  const paidUsersByDay: number[] = Array.from({ length: 7 }, () => 0);
+
+  let totalUsers = 0;
+  let level1Users = 0;
+  let level2Users = 0;
+  let subscriptionActive = 0;
+  let subscriptionExpired = 0;
+  let paymentPaid = 0;
+  let paymentUnpaid = 0;
+
+  for (const phone of phones) {
+    const stored = await storeGet<UserAppData>(`user:${phone}:data`);
+    if (!stored) continue;
+
+    totalUsers += 1;
+
+    const levelData = await getUserLevel(phone);
+    const card = await storeGet<SavedCard>(`user:${phone}:payment_method`);
+    const hasCard = !!card?.paymentMethodId;
+    const accessUntil =
+      typeof levelData.subscribedUntil === "number" && levelData.subscribedUntil > 0
+        ? levelData.subscribedUntil
+        : null;
+    const isActive = levelData.level >= 2 && !!accessUntil && accessUntil > now;
+    const isExpired = levelData.level >= 2 && !!accessUntil && accessUntil <= now;
+    const isPaid = isActive || hasCard;
+
+    if (levelData.level >= 2) level2Users += 1;
+    else level1Users += 1;
+
+    if (isActive) subscriptionActive += 1;
+    if (isExpired) subscriptionExpired += 1;
+    if (isPaid) paymentPaid += 1;
+    else paymentUnpaid += 1;
+
+    for (let i = 0; i < 7; i++) {
+      const dayStart = day0 - (6 - i) * dayMs;
+      const dayEnd = dayStart + dayMs - 1;
+      const wasUpdatedThisDay =
+        typeof stored.updatedAt === "number" &&
+        stored.updatedAt >= dayStart &&
+        stored.updatedAt <= dayEnd;
+      if (wasUpdatedThisDay) {
+        activeUsersByDay[i] += 1;
+      }
+      if (accessUntil && accessUntil >= dayStart && accessUntil <= dayEnd) {
+        paidUsersByDay[i] += 1;
+      }
+    }
+  }
+
+  const labels = Array.from({ length: 7 }).map((_, i) => {
+    const ts = day0 - (6 - i) * dayMs;
+    return new Date(ts).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+  });
+
+  return c.json({
+    ok: true,
+    totals: {
+      totalUsers,
+      level1Users,
+      level2Users,
+      subscriptionActive,
+      subscriptionExpired,
+      paymentPaid,
+      paymentUnpaid,
+    },
+    charts: {
+      labels,
+      activeUsersByDay,
+      paidUsersByDay,
+    },
+  });
 });
 
 adminApi.get("/admin-api/users/:phone", async (c) => {

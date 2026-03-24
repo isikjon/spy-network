@@ -39,6 +39,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     .admin-analytics-info p, .admin-analytics-info li { font-size: 13px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px; }
     .admin-analytics-info ol { padding-left: 24px; margin-bottom: 16px; }
     .admin-analytics-info code { padding: 2px 6px; background: var(--overlay); border: 1px solid var(--border); font-size: 12px; }
+    .admin-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .admin-metric-card { border: 2px solid var(--border); background: var(--card); padding: 14px; }
+    .admin-metric-label { color: var(--text-secondary); font-size: 11px; letter-spacing: 1.5px; margin-bottom: 8px; }
+    .admin-metric-value { color: var(--primary); font-size: 26px; font-weight: 700; letter-spacing: 1px; }
+    .admin-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .admin-chart-card { border: 2px solid var(--border); background: var(--card); padding: 14px; }
+    .admin-chart-title { margin: 0 0 10px; font-size: 12px; color: var(--text-secondary); letter-spacing: 2px; }
+    .admin-chart-svg { width: 100%; height: 220px; display: block; background: var(--overlay); border: 1px solid var(--border); }
+    .admin-chart-empty { color: var(--text-secondary); font-size: 12px; padding: 18px 0; }
+    @media (max-width: 900px) { .admin-charts { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -116,6 +126,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               <tr>
                 <th>НОМЕР</th>
                 <th>ДОСЬЕ</th>
+                <th>ДОПУСК</th>
+                <th>СТАТУС ПОДПИСКИ</th>
+                <th>СТАТУС ОПЛАТЫ</th>
+                <th>КАРТА</th>
+                <th>ДОСТУП ДО</th>
+                <th>СЛЕД. СПИСАНИЕ</th>
                 <th>ОБНОВЛЁН</th>
                 <th></th>
               </tr>
@@ -130,17 +146,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         </div>
         <div id="panelAnalytics" class="admin-panel admin-page-hidden">
           <div class="admin-analytics-info">
-            <h2>Аналитика в мобильном приложении</h2>
-            <p>Полный раздел <strong>«АНАЛИТИКА»</strong> (статистика по пользователям, шесть рукопожатий, властные группировки) доступен только в мобильном приложении Spy Network.</p>
-            <p><strong>Как зайти:</strong></p>
-            <ol>
-              <li>Откройте приложение на телефоне (или в эмуляторе).</li>
-              <li>Перейдите на экран <strong>Админ</strong> (из меню или по диплинку <code>…/admin</code>).</li>
-              <li>Введите логин и пароль администратора и нажмите <strong>Войти</strong>.</li>
-              <li>После входа токен сохраняется автоматически — вводить его нигде не нужно.</li>
-              <li>Появится вкладка <strong>«АНАЛИТИКА»</strong> с подразделами: пользователи, досье, сеть, профиль, шесть рукопожатий, властные группировки.</li>
-            </ol>
-            <p>В веб-версии админки (эта страница) доступен только список пользователей. Для полной аналитики используйте приложение.</p>
+            <h2>Аналитика пользователей</h2>
+            <p>Дашборд показывает связь пользователей, подписок и оплат в одном месте: допуск, статусы подписки/оплаты и динамику за последние 7 дней.</p>
+            <div id="metrics" class="admin-metrics"></div>
+            <div class="admin-charts">
+              <div class="admin-chart-card">
+                <h3 class="admin-chart-title">АКТИВНОСТЬ ПОЛЬЗОВАТЕЛЕЙ (7 ДНЕЙ)</h3>
+                <div id="chartActive"></div>
+              </div>
+              <div class="admin-chart-card">
+                <h3 class="admin-chart-title">ПЛАТЕЖНАЯ ДИНАМИКА (7 ДНЕЙ)</h3>
+                <div id="chartPaid"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -156,6 +174,66 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       return h;
     }
     function show(el, visible) { el.classList.toggle('admin-page-hidden', !visible); }
+    function formatDate(ts) {
+      if (!ts || typeof ts !== 'number' || ts <= 0) return '-';
+      return new Date(ts).toLocaleString();
+    }
+    function statusLabel(v) {
+      if (v === 'active') return 'АКТИВНА';
+      if (v === 'expired') return 'ИСТЕКЛА';
+      return 'НЕТ';
+    }
+    function paymentLabel(v) {
+      return v === 'paid' ? 'ОПЛАЧЕНА' : 'НЕ ОПЛАЧЕНА';
+    }
+    function renderSimpleBarChart(targetId, labels, values, color) {
+      const host = document.getElementById(targetId);
+      if (!host) return;
+      if (!Array.isArray(labels) || !Array.isArray(values) || labels.length === 0 || values.length === 0) {
+        host.innerHTML = '<div class="admin-chart-empty">Нет данных</div>';
+        return;
+      }
+      const max = Math.max(1, ...values);
+      const width = 720;
+      const height = 220;
+      const pad = 26;
+      const innerW = width - pad * 2;
+      const innerH = height - pad * 2;
+      const step = innerW / values.length;
+      const barW = Math.max(14, step - 10);
+      let bars = '';
+      let xLabels = '';
+      for (let i = 0; i < values.length; i++) {
+        const v = Number(values[i] || 0);
+        const h = Math.max(2, Math.round((v / max) * innerH));
+        const x = Math.round(pad + i * step + (step - barW) / 2);
+        const y = pad + innerH - h;
+        bars += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + h + '" fill="' + color + '"></rect>';
+        xLabels += '<text x="' + (x + Math.round(barW / 2)) + '" y="' + (height - 8) + '" fill="var(--text-secondary)" text-anchor="middle" font-size="10">' + String(labels[i] || '') + '</text>';
+      }
+      host.innerHTML =
+        '<svg class="admin-chart-svg" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">' +
+        '<line x1="' + pad + '" y1="' + (pad + innerH) + '" x2="' + (pad + innerW) + '" y2="' + (pad + innerH) + '" stroke="var(--border)" />' +
+        bars +
+        xLabels +
+        '</svg>';
+    }
+    function renderMetrics(totals) {
+      const root = document.getElementById('metrics');
+      if (!root || !totals) return;
+      const items = [
+        ['ПОЛЬЗОВАТЕЛИ', totals.totalUsers],
+        ['ДОПУСК 1', totals.level1Users],
+        ['ДОПУСК 2', totals.level2Users],
+        ['ПОДПИСКА АКТИВНА', totals.subscriptionActive],
+        ['ПОДПИСКА ИСТЕКЛА', totals.subscriptionExpired],
+        ['ОПЛАЧЕНО', totals.paymentPaid],
+        ['НЕ ОПЛАЧЕНО', totals.paymentUnpaid]
+      ];
+      root.innerHTML = items.map(function(it) {
+        return '<div class="admin-metric-card"><div class="admin-metric-label">' + it[0] + '</div><div class="admin-metric-value">' + String(it[1] ?? 0) + '</div></div>';
+      }).join('');
+    }
     function setError(msg) {
       const el = document.getElementById('loginError');
       el.textContent = msg || '';
@@ -212,7 +290,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const tbody = document.getElementById('usersBody');
         tbody.innerHTML = data.users.map(function(u) {
           const phone = (u.phoneNumber || '').replace(/"/g, '&quot;');
-          return '<tr><td>' + u.phoneNumber + '</td><td>' + u.dossiersCount + '</td><td>' + new Date(u.updatedAt).toLocaleString() + '</td><td><a href="#" data-phone="' + phone + '">Подробнее</a></td></tr>';
+          const level = Number(u.level || 1) >= 2 ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1';
+          return '<tr>' +
+            '<td>' + u.phoneNumber + '</td>' +
+            '<td>' + (u.dossiersCount ?? 0) + '</td>' +
+            '<td>' + level + '</td>' +
+            '<td>' + statusLabel(u.subscriptionStatus) + '</td>' +
+            '<td>' + paymentLabel(u.paymentStatus) + '</td>' +
+            '<td>' + (u.hasCard ? 'ДА' : '-') + '</td>' +
+            '<td>' + formatDate(u.accessUntil) + '</td>' +
+            '<td>' + formatDate(u.nextChargeAt) + '</td>' +
+            '<td>' + formatDate(u.updatedAt) + '</td>' +
+            '<td><a href="#" data-phone="' + phone + '">Подробнее</a></td>' +
+            '</tr>';
         }).join('');
         tbody.querySelectorAll('a[data-phone]').forEach(function(a) {
           a.onclick = function(e) { e.preventDefault(); loadUserDetail(a.getAttribute('data-phone')); };
@@ -231,6 +321,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       } catch (e) { console.error(e); }
     }
     document.getElementById('refreshBtn').onclick = loadUsers;
+    async function loadOverview() {
+      try {
+        const r = await fetch(API + '/admin-api/analytics/overview', { headers: headers() });
+        if (r.status === 401) { document.getElementById('logoutBtn').click(); return; }
+        const data = await r.json();
+        if (!data.ok) return;
+        renderMetrics(data.totals);
+        renderSimpleBarChart('chartActive', data.charts?.labels || [], data.charts?.activeUsersByDay || [], '#00ff41');
+        renderSimpleBarChart('chartPaid', data.charts?.labels || [], data.charts?.paidUsersByDay || [], '#00b5ff');
+      } catch (e) {
+        console.error(e);
+      }
+    }
     function switchTab(tab) {
       var isUsers = tab === 'users';
       document.getElementById('panelUsers').classList.toggle('admin-page-hidden', !isUsers);
@@ -238,6 +341,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       document.getElementById('tabUsers').classList.toggle('active', isUsers);
       document.getElementById('tabAnalytics').classList.toggle('active', !isUsers);
       document.getElementById('dashboardTitle').textContent = isUsers ? 'ПОЛЬЗОВАТЕЛИ' : 'АНАЛИТИКА';
+      if (!isUsers) loadOverview();
     }
     document.getElementById('tabUsers').onclick = function() { switchTab('users'); };
     document.getElementById('tabAnalytics').onclick = function() { switchTab('analytics'); };
@@ -248,6 +352,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       show(document.getElementById('loginCard'), false);
       show(document.getElementById('dashboard'), true);
       loadUsers();
+      loadOverview();
     })();
   </script>
 </body>
