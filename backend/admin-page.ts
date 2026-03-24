@@ -133,7 +133,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 <th>ДОСТУП ДО</th>
                 <th>СЛЕД. СПИСАНИЕ</th>
                 <th>ОБНОВЛЁН</th>
-                <th></th>
               </tr>
             </thead>
             <tbody id="usersBody"></tbody>
@@ -306,12 +305,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             '<td>' + formatDate(u.accessUntil) + '</td>' +
             '<td>' + formatDate(u.nextChargeAt) + '</td>' +
             '<td>' + formatDate(u.updatedAt) + '</td>' +
-            '<td><a href="#" data-phone="' + phone + '">Подробнее</a></td>' +
             '</tr>';
         }).join('');
-        tbody.querySelectorAll('a[data-phone]').forEach(function(a) {
-          a.onclick = function(e) { e.preventDefault(); loadUserDetail(a.getAttribute('data-phone')); };
-        });
       } catch (e) { console.error(e); }
     }
     async function loadUserDetail(phone) {
