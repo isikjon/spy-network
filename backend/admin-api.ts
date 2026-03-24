@@ -23,8 +23,8 @@ type AdminUserRow = {
   dossiersCount: number;
   updatedAt: number;
   level: number;
-  subscriptionStatus: "none" | "active" | "expired";
-  paymentStatus: "paid" | "unpaid";
+  subscriptionStatus: "none" | "active" | "expired" | "cancelled";
+  paymentStatus: "none" | "paid" | "unpaid" | "cancelled";
   hasCard: boolean;
   nextChargeAt: number | null;
   accessUntil: number | null;
@@ -117,18 +117,25 @@ adminApi.get("/admin-api/users", async (c) => {
         ? levelData.subscribedUntil
         : null;
     const isActive = levelData.level >= 2 && !!accessUntil && accessUntil > now;
-    const isExpired = levelData.level >= 2 && !!accessUntil && accessUntil <= now;
+    const isExpired = !!accessUntil && accessUntil <= now;
+    const isCancelled = isActive && !hasCard;
+
+    const subscriptionStatus: AdminUserRow["subscriptionStatus"] =
+      isCancelled ? "cancelled" : isActive ? "active" : isExpired ? "expired" : "none";
+
+    const paymentStatus: AdminUserRow["paymentStatus"] =
+      !accessUntil ? "none" : isCancelled ? "cancelled" : isActive ? "paid" : "unpaid";
 
     users.push({
       phoneNumber: maskPhone(stored.phoneNumber || phone),
       dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
       updatedAt: typeof stored.updatedAt === "number" ? stored.updatedAt : 0,
       level: levelData.level,
-      subscriptionStatus: isActive ? "active" : isExpired ? "expired" : "none",
-      paymentStatus: isActive || hasCard ? "paid" : "unpaid",
+      subscriptionStatus,
+      paymentStatus,
       hasCard,
       nextChargeAt: isActive ? accessUntil : null,
-      accessUntil: isActive ? accessUntil : null,
+      accessUntil,
     });
   }
   users.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -164,6 +171,7 @@ adminApi.get("/admin-api/analytics/overview", async (c) => {
   let level2Users = 0;
   let subscriptionActive = 0;
   let subscriptionExpired = 0;
+  let subscriptionCancelled = 0;
   let paymentPaid = 0;
   let paymentUnpaid = 0;
 
@@ -181,15 +189,18 @@ adminApi.get("/admin-api/analytics/overview", async (c) => {
         ? levelData.subscribedUntil
         : null;
     const isActive = levelData.level >= 2 && !!accessUntil && accessUntil > now;
-    const isExpired = levelData.level >= 2 && !!accessUntil && accessUntil <= now;
-    const isPaid = isActive || hasCard;
+    const isExpired = !!accessUntil && accessUntil <= now;
+    const isCancelled = isActive && !hasCard;
 
     if (levelData.level >= 2) level2Users += 1;
     else level1Users += 1;
 
-    if (isActive) subscriptionActive += 1;
+    if (isCancelled) subscriptionCancelled += 1;
+    else if (isActive) subscriptionActive += 1;
     if (isExpired) subscriptionExpired += 1;
-    if (isPaid) paymentPaid += 1;
+
+    if (!accessUntil) { /* no subscription — skip payment counter */ }
+    else if (isActive) paymentPaid += 1;
     else paymentUnpaid += 1;
 
     for (let i = 0; i < 7; i++) {
@@ -221,6 +232,7 @@ adminApi.get("/admin-api/analytics/overview", async (c) => {
       level2Users,
       subscriptionActive,
       subscriptionExpired,
+      subscriptionCancelled,
       paymentPaid,
       paymentUnpaid,
     },

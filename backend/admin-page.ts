@@ -180,11 +180,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
     function statusLabel(v) {
       if (v === 'active') return 'АКТИВНА';
+      if (v === 'cancelled') return 'ОТМЕНЕНА';
       if (v === 'expired') return 'ИСТЕКЛА';
-      return 'НЕТ';
+      return '—';
     }
     function paymentLabel(v) {
-      return v === 'paid' ? 'ОПЛАЧЕНА' : 'НЕ ОПЛАЧЕНА';
+      if (v === 'paid') return 'ОПЛАЧЕНА';
+      if (v === 'unpaid') return 'НЕ ОПЛАЧЕНА';
+      if (v === 'cancelled') return 'ОТМЕНЕНА';
+      return '—';
     }
     function renderSimpleBarChart(targetId, labels, values, color) {
       const host = document.getElementById(targetId);
@@ -226,6 +230,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         ['ДОПУСК 1', totals.level1Users],
         ['ДОПУСК 2', totals.level2Users],
         ['ПОДПИСКА АКТИВНА', totals.subscriptionActive],
+        ['ПОДПИСКА ОТМЕНЕНА', totals.subscriptionCancelled],
         ['ПОДПИСКА ИСТЕКЛА', totals.subscriptionExpired],
         ['ОПЛАЧЕНО', totals.paymentPaid],
         ['НЕ ОПЛАЧЕНО', totals.paymentUnpaid]
