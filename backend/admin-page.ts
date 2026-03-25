@@ -293,7 +293,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         if (!data.ok) return;
         const tbody = document.getElementById('usersBody');
         tbody.innerHTML = data.users.map(function(u) {
-          const phone = (u.phoneNumber || '').replace(/"/g, '&quot;');
+          const rawPhone = (u.rawPhone || '').replace(/"/g, '&quot;');
           const level = Number(u.level || 1) >= 2 ? 'УРОВЕНЬ 2' : 'УРОВЕНЬ 1';
           return '<tr>' +
             '<td>' + u.phoneNumber + '</td>' +
@@ -305,7 +305,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             '<td>' + formatDate(u.accessUntil) + '</td>' +
             '<td>' + formatDate(u.nextChargeAt) + '</td>' +
             '<td>' + formatDate(u.updatedAt) + '</td>' +
-            '<td><a href="#" class="set-charge-link" data-phone="' + phone + '" style="color:#ff0;font-size:11px;">⏱ Тест списания</a></td>' +
+            '<td><a href="#" class="set-charge-link" data-phone="' + rawPhone + '" style="color:#ff0;font-size:11px;">⏱ Тест</a></td>' +
             '</tr>';
         }).join('');
         tbody.querySelectorAll('.set-charge-link').forEach(function(a) {

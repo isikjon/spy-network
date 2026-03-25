@@ -20,6 +20,7 @@ type UserAppData = {
 
 type AdminUserRow = {
   phoneNumber: string;
+  rawPhone: string;
   dossiersCount: number;
   updatedAt: number;
   level: number;
@@ -128,6 +129,7 @@ adminApi.get("/admin-api/users", async (c) => {
 
     users.push({
       phoneNumber: maskPhone(stored.phoneNumber || phone),
+      rawPhone: phone,
       dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
       updatedAt: typeof stored.updatedAt === "number" ? stored.updatedAt : 0,
       level: levelData.level,
