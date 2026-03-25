@@ -133,6 +133,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 <th>ДОСТУП ДО</th>
                 <th>СЛЕД. СПИСАНИЕ</th>
                 <th>ОБНОВЛЁН</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="usersBody"></tbody>
@@ -146,7 +147,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         <div id="panelAnalytics" class="admin-panel admin-page-hidden">
           <div class="admin-analytics-info">
             <h2>Аналитика пользователей</h2>
-            <p>Дашборд показывает связь пользователей, подписок и оплат в одном месте: допуск, статусы подписки/оплаты и динамику за последние 7 дней.</p>
+            <p>Дашборд: допуск, статусы подписки/оплаты и динамика за 7 дней. <b>Активность</b> — пользователи, которые открывали приложение в этот день. <b>Подписки</b> — у скольких была активная подписка.</p>
             <div id="metrics" class="admin-metrics"></div>
             <div class="admin-charts">
               <div class="admin-chart-card">
@@ -154,7 +155,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 <div id="chartActive"></div>
               </div>
               <div class="admin-chart-card">
-                <h3 class="admin-chart-title">ПЛАТЕЖНАЯ ДИНАМИКА (7 ДНЕЙ)</h3>
+                <h3 class="admin-chart-title">АКТИВНЫЕ ПОДПИСКИ (7 ДНЕЙ)</h3>
                 <div id="chartPaid"></div>
               </div>
             </div>
@@ -186,7 +187,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     function paymentLabel(v) {
       if (v === 'paid') return 'ОПЛАЧЕНА';
       if (v === 'unpaid') return 'НЕ ОПЛАЧЕНА';
-      if (v === 'cancelled') return 'ОТМЕНЕНА';
       return '—';
     }
     function renderSimpleBarChart(targetId, labels, values, color) {
@@ -305,8 +305,28 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             '<td>' + formatDate(u.accessUntil) + '</td>' +
             '<td>' + formatDate(u.nextChargeAt) + '</td>' +
             '<td>' + formatDate(u.updatedAt) + '</td>' +
+            '<td><a href="#" class="set-charge-link" data-phone="' + phone + '" style="color:#ff0;font-size:11px;">⏱ Тест списания</a></td>' +
             '</tr>';
         }).join('');
+        tbody.querySelectorAll('.set-charge-link').forEach(function(a) {
+          a.onclick = async function(e) {
+            e.preventDefault();
+            var ph = a.getAttribute('data-phone');
+            var mins = prompt('Через сколько минут установить дату списания?', '5');
+            if (mins === null) return;
+            var m = parseInt(mins, 10);
+            if (isNaN(m) || m < 1) { alert('Введите число минут >= 1'); return; }
+            try {
+              var r = await fetch(API + '/admin-api/set-next-charge', {
+                method: 'POST',
+                headers: headers(),
+                body: JSON.stringify({ phone: ph, minutesFromNow: m })
+              });
+              var data = await r.json();
+              if (data.ok) { alert(data.message); loadUsers(); } else { alert('Ошибка: ' + (data.error || 'unknown')); }
+            } catch (err) { alert('Ошибка сети'); }
+          };
+        });
       } catch (e) { console.error(e); }
     }
     async function loadUserDetail(phone) {

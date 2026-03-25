@@ -7,7 +7,7 @@ import {
   verifyAdminPassword,
 } from "./trpc/utils/admin-auth";
 import { createBackup } from "./backup";
-import { getUserLevel } from "./trpc/utils/user-level";
+import { getUserLevel, setUserLevel } from "./trpc/utils/user-level";
 import type { SavedCard } from "./trpc/routes/payment";
 
 type UserAppData = {
@@ -24,7 +24,7 @@ type AdminUserRow = {
   updatedAt: number;
   level: number;
   subscriptionStatus: "none" | "active" | "expired" | "cancelled";
-  paymentStatus: "none" | "paid" | "unpaid" | "cancelled";
+  paymentStatus: "none" | "paid" | "unpaid";
   hasCard: boolean;
   nextChargeAt: number | null;
   accessUntil: number | null;
@@ -124,7 +124,7 @@ adminApi.get("/admin-api/users", async (c) => {
       isCancelled ? "cancelled" : isActive ? "active" : isExpired ? "expired" : "none";
 
     const paymentStatus: AdminUserRow["paymentStatus"] =
-      !accessUntil ? "none" : isCancelled ? "cancelled" : isActive ? "paid" : "unpaid";
+      !accessUntil ? "none" : (isActive || isCancelled) ? "paid" : "unpaid";
 
     users.push({
       phoneNumber: maskPhone(stored.phoneNumber || phone),
@@ -199,8 +199,8 @@ adminApi.get("/admin-api/analytics/overview", async (c) => {
     else if (isActive) subscriptionActive += 1;
     if (isExpired) subscriptionExpired += 1;
 
-    if (!accessUntil) { /* no subscription — skip payment counter */ }
-    else if (isActive) paymentPaid += 1;
+    if (!accessUntil) { /* no subscription */ }
+    else if (isActive || isCancelled) paymentPaid += 1;
     else paymentUnpaid += 1;
 
     for (let i = 0; i < 7; i++) {
@@ -213,7 +213,7 @@ adminApi.get("/admin-api/analytics/overview", async (c) => {
       if (wasUpdatedThisDay) {
         activeUsersByDay[i] += 1;
       }
-      if (accessUntil && accessUntil >= dayStart && accessUntil <= dayEnd) {
+      if (accessUntil && accessUntil >= dayStart) {
         paidUsersByDay[i] += 1;
       }
     }
@@ -299,4 +299,34 @@ adminApi.post("/admin-api/backup", async (c) => {
   } catch (e) {
     return c.json({ ok: false, error: "BACKUP_FAILED" }, 500);
   }
+});
+
+adminApi.post("/admin-api/set-next-charge", async (c) => {
+  const user = await getAdminFromRequest(c.req.raw);
+  if (!user) {
+    return c.json({ ok: false, error: "UNAUTHENTICATED" }, 401);
+  }
+  if (user.role !== "admin") {
+    return c.json({ ok: false, error: "FORBIDDEN" }, 403);
+  }
+  let body: { phone?: string; minutesFromNow?: number };
+  try {
+    body = (await c.req.json()) as { phone?: string; minutesFromNow?: number };
+  } catch {
+    return c.json({ ok: false, error: "INVALID_BODY" }, 400);
+  }
+  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+  const minutes = typeof body.minutesFromNow === "number" ? body.minutesFromNow : 5;
+  if (!phone) {
+    return c.json({ ok: false, error: "MISSING_PHONE" }, 400);
+  }
+  const newUntil = Date.now() + minutes * 60 * 1000;
+  await setUserLevel(phone, 2, newUntil);
+  return c.json({
+    ok: true,
+    phone,
+    subscribedUntil: newUntil,
+    subscribedUntilHuman: new Date(newUntil).toISOString(),
+    message: `Дата списания установлена через ${minutes} мин.`,
+  });
 });
