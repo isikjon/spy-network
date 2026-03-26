@@ -1,8 +1,9 @@
 import { YandexBanner } from '@/components/YandexBanner';
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
+import { isStaffWebBuild } from '@/lib/staff';
 import { Redirect, router } from 'expo-router';
-import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor, Loader, MessageCircle, UserX } from 'lucide-react-native';
+import { User, Phone, LogOut, Shield, Tag, Plus, Edit2, Trash2, X, Globe, Palette, BookOpen, Download, Upload, CreditCard, Lock, QrCode, Monitor, Loader, MessageCircle, UserX, KeyRound, BarChart2 } from 'lucide-react-native';
 
 import Tutorial from '@/components/Tutorial';
 import {
@@ -47,6 +48,11 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
   const cancelSubscriptionMutation = trpc.payment.cancelSubscription.useMutation();
   const deleteAccountMutation = trpc.appData.deleteMyAccount.useMutation();
   const cardInfoQuery = trpc.payment.getCardInfo.useQuery(undefined, { enabled: !!phoneNumber });
+  const staffAccessQuery = trpc.appData.staffMenuAccess.useQuery(undefined, {
+    enabled: !!phoneNumber && isStaffWebBuild(),
+  });
+  const showStaffProfile =
+    isStaffWebBuild() && staffAccessQuery.data?.ok === true && staffAccessQuery.data?.allowed === true;
 
   const handleSubscribe = async () => {
     setPaymentLoading(true);
@@ -697,6 +703,64 @@ export default function ProfileScreen({ embedded }: ProfileScreenProps) {
               </TouchableOpacity>
             </View>
           </View>
+            </>
+          )}
+
+          {showStaffProfile && (
+            <>
+              <View style={[styles.backupContainer, styles.webBlockSpacing]}>
+                <View style={styles.backupHeader}>
+                  <View style={styles.backupHeaderLeft}>
+                    <Download size={20} color={theme.primary} strokeWidth={1.5} />
+                    <Text style={styles.backupTitle}>{t.profile.backup}</Text>
+                  </View>
+                </View>
+                <View style={styles.backupButtons}>
+                  <TouchableOpacity
+                    style={styles.backupButton}
+                    onPress={handleCreateBackup}
+                    activeOpacity={0.7}
+                  >
+                    <Download size={18} color={theme.primary} />
+                    <Text style={styles.backupButtonText}>{t.profile.createBackup}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.backupButton}
+                    onPress={handleRestoreBackup}
+                    activeOpacity={0.7}
+                  >
+                    <Upload size={18} color={theme.primary} />
+                    <Text style={styles.backupButtonText}>{t.profile.restoreBackup}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={[styles.backupContainer, styles.webBlockSpacing]}>
+                <View style={styles.backupHeader}>
+                  <View style={styles.backupHeaderLeft}>
+                    <Lock size={20} color={theme.primary} strokeWidth={1.5} />
+                    <Text style={styles.backupTitle}>СЛУЖЕБНОЕ МЕНЮ</Text>
+                  </View>
+                </View>
+                <View style={styles.backupButtons}>
+                  <TouchableOpacity
+                    style={styles.backupButton}
+                    onPress={() => router.push('/admin' as any)}
+                    activeOpacity={0.7}
+                  >
+                    <KeyRound size={18} color={theme.primary} />
+                    <Text style={styles.backupButtonText}>МЕНЮ АДМИН</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.backupButton}
+                    onPress={() => router.push('/admin' as any)}
+                    activeOpacity={0.7}
+                  >
+                    <BarChart2 size={18} color={theme.primary} />
+                    <Text style={styles.backupButtonText}>МЕНЮ АНАЛИТИКА</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </>
           )}
 

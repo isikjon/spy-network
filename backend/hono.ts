@@ -131,11 +131,38 @@ app.use("/_expo/*", serveStatic({ root: "dist" }));
 app.use("/assets/*", serveStatic({ root: "dist" }));
 app.get("/favicon.ico", serveStatic({ root: "dist", path: "/favicon.ico" }));
 
+/** Секретный путь staff-сборки (должен совпадать с EXPO_PUBLIC_WEB_BASE_PATH при сборке dist-staff) */
+const STAFF_WEB_SEGMENT = (process.env.STAFF_WEB_PATH || "lkdj7djdjhg").replace(/^\/+|\/+$/g, "");
+const STAFF_BASE = `/${STAFF_WEB_SEGMENT}`;
+
 // Скрипт-шим: убирает /app из pathname до старта React (Expo Router найдёт роут),
 // патчит history API чтобы /app-префикс возвращался при любой навигации,
 // и восстанавливает /app после полной загрузки страницы (когда React не делает replaceState).
 const BASE_PATH_SHIM = `<script>(function(){
   var B='/app';
+  var _pu=history.pushState.bind(history);
+  var _re=history.replaceState.bind(history);
+  var p=location.pathname;
+  if(p===B||p.startsWith(B+'/')){
+    _re(null,'',(p.slice(B.length)||'/')+location.search+location.hash);
+  }
+  function ab(u){
+    if(!u||typeof u!=='string')return u;
+    if(u.startsWith(B)||u.startsWith('http')||u.startsWith('//'))return u;
+    return B+(u==='/'?'':u.startsWith('/')?u:'/'+u);
+  }
+  history.pushState=function(s,t,u){_pu(s,t,ab(u));};
+  history.replaceState=function(s,t,u){_re(s,t,ab(u));};
+  window.addEventListener('load',function(){
+    if(!location.pathname.startsWith(B)){
+      var cp=location.pathname;
+      _re(history.state||null,'',B+(cp==='/'?'':cp)+location.search+location.hash);
+    }
+  });
+})()</script>`;
+
+const STAFF_PATH_SHIM = `<script>(function(){
+  var B=${JSON.stringify(STAFF_BASE)};
   var _pu=history.pushState.bind(history);
   var _re=history.replaceState.bind(history);
   var p=location.pathname;
@@ -187,6 +214,46 @@ app.get("/app/*", async (c) => {
     return c.html(html);
   } catch {
     return c.text("App not built. Run: npx expo export --platform web", 404);
+  }
+});
+
+// Staff SPA: отдельная сборка с EXPO_PUBLIC_ENABLE_STAFF_MENU=true (тот же API)
+const staffExpoPrefix = `${STAFF_BASE}/_expo`;
+const staffAssetsPrefix = `${STAFF_BASE}/assets`;
+app.use(
+  `${staffExpoPrefix}/*`,
+  serveStatic({
+    root: "dist-staff",
+    rewriteRequestPath: (path) => path.replace(STAFF_BASE, "") || "/",
+  }),
+);
+app.use(
+  `${staffAssetsPrefix}/*`,
+  serveStatic({
+    root: "dist-staff",
+    rewriteRequestPath: (path) => path.replace(STAFF_BASE, "") || "/",
+  }),
+);
+app.get(`${STAFF_BASE}/favicon.ico`, serveStatic({ root: "dist-staff", path: "/favicon.ico" }));
+
+app.get(STAFF_BASE, async (c) => {
+  const fs = await import("node:fs/promises");
+  try {
+    let html = await fs.readFile("dist-staff/index.html", "utf-8");
+    html = html.replace("</head>", STAFF_PATH_SHIM + "</head>");
+    return c.html(html);
+  } catch {
+    return c.text("Staff web bundle not built (dist-staff missing)", 404);
+  }
+});
+app.get(`${STAFF_BASE}/*`, async (c) => {
+  const fs = await import("node:fs/promises");
+  try {
+    let html = await fs.readFile("dist-staff/index.html", "utf-8");
+    html = html.replace("</head>", STAFF_PATH_SHIM + "</head>");
+    return c.html(html);
+  } catch {
+    return c.text("Staff web bundle not built (dist-staff missing)", 404);
   }
 });
 

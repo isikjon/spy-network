@@ -254,4 +254,27 @@ export const appDataRouter = createTRPCRouter({
 
     return { ok: true as const };
   }),
+
+  /**
+   * Staff-сборка веба: показ служебного меню только если номер в STAFF_PHONE_ALLOWLIST (цифры, через запятую).
+   */
+  staffMenuAccess: publicProcedure.query(async ({ ctx }) => {
+    const phone = ctx.userPhone;
+    if (!phone) {
+      return { ok: true as const, allowed: false };
+    }
+
+    const raw = process.env.STAFF_PHONE_ALLOWLIST ?? "";
+    const list = raw
+      .split(/[,;\s]+/)
+      .map((s) => s.replace(/\D/g, ""))
+      .filter((s) => s.length >= 10);
+    if (list.length === 0) {
+      return { ok: true as const, allowed: false };
+    }
+
+    const digits = phone.replace(/\D/g, "");
+    const allowed = list.some((entry) => digits === entry || digits.endsWith(entry));
+    return { ok: true as const, allowed };
+  }),
 });

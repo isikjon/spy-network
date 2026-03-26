@@ -10,6 +10,7 @@ import { AppProvider, useApp } from "@/contexts/AppContext";
 import LoadingScreen from "@/components/LoadingScreen";
 import Tutorial from "@/components/Tutorial";
 import { trpc, trpcClient } from "@/lib/trpc";
+import { isStaffWebBuild } from "@/lib/staff";
 
 let adsInitialized = false;
 
@@ -57,6 +58,14 @@ function RootLayoutNav() {
 
   const inAuth = rootSegment === 'auth';
   const inAdmin = rootSegment === 'admin';
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    if (!rootNavState?.key) return;
+    if (isStaffWebBuild()) return;
+    if (!inAdmin) return;
+    router.replace("/(tabs)");
+  }, [inAdmin, router, rootNavState?.key]);
 
   useEffect(() => {
     if (isLoading) return;
