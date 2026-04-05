@@ -10,31 +10,21 @@ import { AppProvider, useApp } from "@/contexts/AppContext";
 import LoadingScreen from "@/components/LoadingScreen";
 import Tutorial from "@/components/Tutorial";
 import { trpc, trpcClient } from "@/lib/trpc";
-import { isStaffWebBuild } from "@/lib/staff";
-import { isAppOpenAdSupported, startYandexAdsInitialization } from "@/lib/yandex-ads-init";
 
-let appOpenShown = false;
-async function showAppOpenAd() {
-  if (Platform.OS === "web" || appOpenShown || !isAppOpenAdSupported()) return;
-  appOpenShown = true;
-  try {
-    const { AppOpenAdLoader, AdRequestConfiguration } = require('yandex-mobile-ads');
-    const loader = await AppOpenAdLoader.create();
-    const config = new AdRequestConfiguration({ adUnitId: 'R-M-18890253-1' });
-    const ad = await loader.loadAd(config);
-    await ad.show();
-    console.log('[ads] App Open ad shown');
-  } catch (e) {
-    console.warn('[ads] App Open ad error:', e);
-  }
-}
+void SplashScreen.preventAutoHideAsync();
 
-SplashScreen.preventAutoHideAsync();
-
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: Platform.OS !== 'web',
+      retry: 1,
+    },
+  },
+});
 
 function RootLayoutNav() {
-  const { isAuthenticated, isLoading, theme, tutorialCompleted, completeTutorial, t, subscriptionLevel } = useApp();
+  const { isAuthenticated, isLoading, theme, tutorialCompleted, completeTutorial, t } = useApp();
   const segments = useSegments();
   const router = useRouter();
   const rootNavState = useRootNavigationState();
@@ -44,15 +34,7 @@ function RootLayoutNav() {
   const rootSegment = segments?.[0] ?? '';
 
   const inAuth = rootSegment === 'auth';
-  const inAdmin = rootSegment === 'admin';
-
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    if (!rootNavState?.key) return;
-    if (isStaffWebBuild()) return;
-    if (!inAdmin) return;
-    router.replace("/(tabs)");
-  }, [inAdmin, router, rootNavState?.key]);
+  const inAdmin = rootSegment === 'admin' || rootSegment === 'admin-analytics';
 
   useEffect(() => {
     if (isLoading) return;
@@ -74,16 +56,13 @@ function RootLayoutNav() {
       hasNavigated.current = true;
       setTimeout(() => {
         router.replace('/(tabs)');
-        if (subscriptionLevel !== 'working') {
-          setTimeout(showAppOpenAd, 1500);
-        }
       }, 0);
     }
 
     if ((isAuthenticated && !inAuth && !inAdmin) || (!isAuthenticated && inAuth)) {
       hasNavigated.current = false;
     }
-  }, [isAuthenticated, isLoading, rootNavState?.key, rootSegment]);
+  }, [inAdmin, inAuth, isAuthenticated, isLoading, rootNavState?.key, rootSegment, router]);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && !tutorialCompleted) {
@@ -109,6 +88,7 @@ function RootLayoutNav() {
         <Stack.Screen name="auth" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="admin" options={{ headerShown: true }} />
+        <Stack.Screen name="admin-analytics" options={{ headerShown: true }} />
         <Stack.Screen
           name="qr-confirm"
           options={{
@@ -136,13 +116,12 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   useEffect(() => {
-    SplashScreen.hideAsync();
-    startYandexAdsInitialization();
+    void SplashScreen.hideAsync();
 
     if (Platform.OS === "android") {
-      NavigationBar.setBackgroundColorAsync("rgba(0,0,0,0.01)");
-      NavigationBar.setVisibilityAsync("hidden");
-      NavigationBar.setBehaviorAsync("overlay-swipe");
+      void NavigationBar.setBackgroundColorAsync("rgba(0,0,0,0.01)");
+      void NavigationBar.setVisibilityAsync("hidden");
+      void NavigationBar.setBehaviorAsync("overlay-swipe");
     }
   }, []);
 

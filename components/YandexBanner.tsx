@@ -1,3 +1,4 @@
+import { whenYandexAdsReady } from '@/lib/yandex-ads-init';
 import React, { useEffect, useState } from 'react';
 import { Platform, useWindowDimensions, View } from 'react-native';
 
@@ -31,9 +32,18 @@ export function YandexBanner({ adUnitId = BANNER_ID, inline }: YandexBannerProps
 
   useEffect(() => {
     if (!BannerAdSizeClass || Platform.OS === 'web') return;
-    BannerAdSizeClass.inlineSize(bannerWidth, bannerHeight)
-      .then(setAdSize)
-      .catch((e: any) => console.warn('[ads] banner size error:', e));
+    let cancelled = false;
+    whenYandexAdsReady().then(() => {
+      if (cancelled) return;
+      BannerAdSizeClass.inlineSize(bannerWidth, bannerHeight)
+        .then((size: any) => {
+          if (!cancelled) setAdSize(size);
+        })
+        .catch((e: any) => console.warn('[ads] banner size error:', e));
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [bannerWidth, bannerHeight]);
 
   if (!BannerAdViewComponent || !adSize || Platform.OS === 'web') return null;

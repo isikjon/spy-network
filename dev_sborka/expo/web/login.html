@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Вход в систему - PRO Network</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="pages.css">
+    <link rel="icon" type="image/png" href="favicon.png">
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div class="grid-overlay"></div>
+    
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="logo">
+                <span class="logo-icon">&#9670;</span>
+                <span class="logo-text">PRO Network</span>
+            </a>
+            <div class="nav-links">
+                <a href="index.html">ГЛАВНАЯ</a>
+                <a href="index.html#features">ФУНКЦИИ</a>
+                <a href="support.html">ПОДДЕРЖКА</a>
+                <a href="login.html" class="nav-login active">ВХОД</a>
+            </div>
+            <button class="mobile-menu-btn" onclick="toggleMenu()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html">ГЛАВНАЯ</a>
+        <a href="index.html#features">ФУНКЦИИ</a>
+        <a href="support.html">ПОДДЕРЖКА</a>
+        <a href="login.html">ВХОД</a>
+    </div>
+
+    <main class="page-content">
+        <!-- Login Form -->
+        <div id="loginSection" class="login-container">
+            <div class="login-box">
+                <div class="login-header">
+                    <div class="login-icon">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                        </svg>
+                    </div>
+                    <h1>ВХОД В СИСТЕМУ</h1>
+                    <p>Введите номер телефона для доступа к данным</p>
+                </div>
+
+                <form class="login-form" id="loginForm" onsubmit="handlePhoneLogin(event)">
+                    <div class="form-group">
+                        <label for="phoneInput">НОМЕР ТЕЛЕФОНА</label>
+                        <div class="phone-input-wrap">
+                            <span class="phone-prefix">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                            </span>
+                            <input 
+                                type="tel" 
+                                id="phoneInput" 
+                                name="phone" 
+                                placeholder="+7 XXX XXX XX XX"
+                                autocomplete="tel"
+                                maxlength="20"
+                                required
+                            >
+                        </div>
+                        <div class="form-error" id="loginError"></div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                            <polyline points="10 17 15 12 10 7"/>
+                            <line x1="15" y1="12" x2="3" y2="12"/>
+                        </svg>
+                        УСТАНОВИТЬ СОЕДИНЕНИЕ
+                    </button>
+
+                    <div class="status-indicator">
+                        <span class="dot"></span>
+                        <span>ЗАЩИЩЁННЫЙ КАНАЛ</span>
+                    </div>
+                </form>
+
+                <div class="login-footer-links">
+                    <a href="index.html">&larr; Вернуться на главную</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard (shown after login) -->
+        <div id="dashboardSection" class="dashboard-container" style="display:none;">
+            <div class="dashboard-topbar">
+                <div class="dashboard-topbar-left">
+                    <span class="dashboard-status-dot"></span>
+                    <span class="dashboard-user-phone" id="dashboardPhone"></span>
+                </div>
+                <button class="btn btn-logout" onclick="handleLogout()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    ВЫХОД
+                </button>
+            </div>
+
+            <div class="dashboard-stats" id="dashboardStats">
+                <div class="dash-stat-card">
+                    <div class="dash-stat-value" id="statContacts">-</div>
+                    <div class="dash-stat-label">КОНТАКТОВ</div>
+                </div>
+                <div class="dash-stat-card">
+                    <div class="dash-stat-value" id="statSectors">-</div>
+                    <div class="dash-stat-label">СЕКТОРОВ</div>
+                </div>
+                <div class="dash-stat-card">
+                    <div class="dash-stat-value" id="statGroups">-</div>
+                    <div class="dash-stat-label">ГРУППИРОВОК</div>
+                </div>
+                <div class="dash-stat-card">
+                    <div class="dash-stat-value" id="statDiary">-</div>
+                    <div class="dash-stat-label">ЗАПИСЕЙ</div>
+                </div>
+            </div>
+
+            <div class="dashboard-loading" id="dashboardLoading">
+                <div class="loading-spinner"></div>
+                <span>ЗАГРУЗКА ДАННЫХ...</span>
+            </div>
+
+            <div class="dashboard-error" id="dashboardError" style="display:none;"></div>
+
+            <!-- Contacts list -->
+            <div class="dashboard-section" id="contactsSection" style="display:none;">
+                <div class="dashboard-section-header">
+                    <h2>ДОСЬЕ КОНТАКТОВ</h2>
+                    <div class="dashboard-search-wrap">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" id="searchInput" placeholder="Поиск..." oninput="filterContacts()">
+                    </div>
+                </div>
+
+                <div class="dashboard-filters" id="dashboardFilters"></div>
+
+                <div class="contacts-list" id="contactsList"></div>
+            </div>
+
+            <!-- Contact detail modal -->
+            <div class="contact-modal-overlay" id="contactModal" style="display:none;" onclick="closeContactModal(event)">
+                <div class="contact-modal" onclick="event.stopPropagation()">
+                    <button class="modal-close" onclick="closeContactModal()">&times;</button>
+                    <div id="contactModalContent"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        var API_BASE = '';
+        var storedPhone = localStorage.getItem('web_user_phone');
+        var appData = null;
+
+        function getApiBase() {
+            var hostname = window.location.hostname;
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return window.location.origin;
+            }
+            return '';
+        }
+
+        API_BASE = getApiBase();
+
+        function toggleMenu() {
+            document.getElementById('mobileMenu').classList.toggle('active');
+        }
+
+        // ---- tRPC helpers ----
+        function trpcQuery(path) {
+            var phone = localStorage.getItem('web_user_phone') || '';
+            var input = { "0": { "json": null } };
+            var url = API_BASE + '/api/trpc/' + path + '?batch=1&input=' + encodeURIComponent(JSON.stringify(input));
+            return fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-phone': phone
+                }
+            }).then(function(r) { return r.json(); })
+              .then(function(batch) {
+                  if (Array.isArray(batch) && batch[0] && batch[0].result && batch[0].result.data) {
+                      return batch[0].result.data.json;
+                  }
+                  throw new Error('Unexpected response');
+              });
+        }
+
+        // ---- Login ----
+        function handlePhoneLogin(event) {
+            event.preventDefault();
+            var phone = document.getElementById('phoneInput').value.trim();
+            var errorEl = document.getElementById('loginError');
+            var btn = document.getElementById('submitBtn');
+
+            errorEl.classList.remove('visible');
+
+            var digits = phone.replace(/\D/g, '');
+            if (digits.length < 10) {
+                errorEl.textContent = 'ВВЕДИТЕ КОРРЕКТНЫЙ НОМЕР ТЕЛЕФОНА (МИН. 10 ЦИФР)';
+                errorEl.classList.add('visible');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> ПОДКЛЮЧЕНИЕ...';
+
+            localStorage.setItem('web_user_phone', phone);
+            storedPhone = phone;
+
+            loadDashboard().finally(function() {
+                btn.disabled = false;
+                btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> УСТАНОВИТЬ СОЕДИНЕНИЕ';
+            });
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('web_user_phone');
+            storedPhone = null;
+            appData = null;
+            document.getElementById('loginSection').style.display = '';
+            document.getElementById('dashboardSection').style.display = 'none';
+        }
+
+        // ---- Dashboard ----
+        function showDashboard() {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = '';
+            document.getElementById('dashboardPhone').textContent = storedPhone;
+        }
+
+        function loadDashboard() {
+            showDashboard();
+            document.getElementById('dashboardLoading').style.display = 'flex';
+            document.getElementById('dashboardError').style.display = 'none';
+            document.getElementById('contactsSection').style.display = 'none';
+
+            return trpcQuery('appData.getMyData')
+                .then(function(data) {
+                    document.getElementById('dashboardLoading').style.display = 'none';
+
+                    if (data && data.ok) {
+                        appData = data.data;
+                        renderDashboard();
+                    } else {
+                        showError('Не удалось загрузить данные: ' + (data && data.error || 'Неизвестная ошибка'));
+                    }
+                })
+                .catch(function(err) {
+                    document.getElementById('dashboardLoading').style.display = 'none';
+                    showError('Ошибка соединения с сервером: ' + err.message);
+                });
+        }
+
+        function showError(msg) {
+            var el = document.getElementById('dashboardError');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        function renderDashboard() {
+            if (!appData) return;
+
+            var dossiers = appData.dossiers || [];
+            var sectors = appData.sectors || [];
+            var groups = appData.powerGroupings || [];
+            var diaryCount = 0;
+            dossiers.forEach(function(d) {
+                diaryCount += (d.diary || []).length;
+            });
+
+            document.getElementById('statContacts').textContent = dossiers.length;
+            document.getElementById('statSectors').textContent = sectors.length;
+            document.getElementById('statGroups').textContent = groups.length;
+            document.getElementById('statDiary').textContent = diaryCount;
+
+            renderFilters();
+            renderContacts(dossiers);
+            document.getElementById('contactsSection').style.display = '';
+        }
+
+        // ---- Filters ----
+        var activeFilters = { sector: null, circle: null, importance: null };
+
+        function renderFilters() {
+            var container = document.getElementById('dashboardFilters');
+            container.innerHTML = '';
+
+            var sectors = appData.sectors || [];
+            var circles = ['support', 'productivity', 'development'];
+            var circleLabels = { support: 'Поддержка', productivity: 'Продуктивность', development: 'Развитие' };
+            var importances = ['critical', 'high', 'medium', 'low'];
+            var impLabels = { critical: 'Критичный', high: 'Высокий', medium: 'Средний', low: 'Низкий' };
+
+            if (sectors.length > 0) {
+                var row = document.createElement('div');
+                row.className = 'filter-row';
+                row.innerHTML = '<span class="filter-label">СЕКТОР:</span>';
+                sectors.forEach(function(s) {
+                    var btn = document.createElement('button');
+                    btn.className = 'filter-chip' + (activeFilters.sector === s ? ' active' : '');
+                    btn.textContent = s.toUpperCase();
+                    btn.onclick = function() {
+                        activeFilters.sector = activeFilters.sector === s ? null : s;
+                        renderFilters();
+                        filterContacts();
+                    };
+                    row.appendChild(btn);
+                });
+                container.appendChild(row);
+            }
+
+            var circleRow = document.createElement('div');
+            circleRow.className = 'filter-row';
+            circleRow.innerHTML = '<span class="filter-label">КРУГ:</span>';
+            circles.forEach(function(c) {
+                var btn = document.createElement('button');
+                btn.className = 'filter-chip' + (activeFilters.circle === c ? ' active' : '');
+                btn.textContent = (circleLabels[c] || c).toUpperCase();
+                btn.onclick = function() {
+                    activeFilters.circle = activeFilters.circle === c ? null : c;
+                    renderFilters();
+                    filterContacts();
+                };
+                circleRow.appendChild(btn);
+            });
+            container.appendChild(circleRow);
+
+            var impRow = document.createElement('div');
+            impRow.className = 'filter-row';
+            impRow.innerHTML = '<span class="filter-label">ВАЖНОСТЬ:</span>';
+            importances.forEach(function(i) {
+                var btn = document.createElement('button');
+                btn.className = 'filter-chip imp-' + i + (activeFilters.importance === i ? ' active' : '');
+                btn.textContent = (impLabels[i] || i).toUpperCase();
+                btn.onclick = function() {
+                    activeFilters.importance = activeFilters.importance === i ? null : i;
+                    renderFilters();
+                    filterContacts();
+                };
+                impRow.appendChild(btn);
+            });
+            container.appendChild(impRow);
+        }
+
+        function filterContacts() {
+            if (!appData) return;
+            var dossiers = appData.dossiers || [];
+            var search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+
+            var filtered = dossiers.filter(function(d) {
+                if (search && d.contact.name.toLowerCase().indexOf(search) === -1) return false;
+                if (activeFilters.sector && (!d.sectors || d.sectors.indexOf(activeFilters.sector) === -1)) return false;
+                if (activeFilters.circle && d.functionalCircle !== activeFilters.circle) return false;
+                if (activeFilters.importance && d.importance !== activeFilters.importance) return false;
+                return true;
+            });
+
+            renderContacts(filtered);
+        }
+
+        // ---- Contacts ----
+        var impColors = {
+            critical: '#FF0033',
+            high: '#FFAA00',
+            medium: '#00FF41',
+            low: '#555555'
+        };
+        var impLabelsRu = {
+            critical: 'КРИТ.',
+            high: 'ВЫСОК.',
+            medium: 'СРЕД.',
+            low: 'НИЗК.'
+        };
+        var circleLabelsRu = {
+            support: 'Поддержка',
+            productivity: 'Продуктивность',
+            development: 'Развитие'
+        };
+
+        function renderContacts(dossiers) {
+            var list = document.getElementById('contactsList');
+            list.innerHTML = '';
+
+            if (dossiers.length === 0) {
+                list.innerHTML = '<div class="contacts-empty">НЕТ КОНТАКТОВ</div>';
+                return;
+            }
+
+            dossiers.forEach(function(d, idx) {
+                var card = document.createElement('div');
+                card.className = 'contact-card';
+                card.onclick = function() { openContact(d); };
+
+                var initials = d.contact.name.split(' ').map(function(w) { return w[0] || ''; }).join('').substring(0, 2).toUpperCase();
+                var impColor = impColors[d.importance] || '#555';
+                var impLabel = impLabelsRu[d.importance] || d.importance;
+
+                card.innerHTML =
+                    '<div class="contact-avatar" style="border-color:' + impColor + '">' + initials + '</div>' +
+                    '<div class="contact-info">' +
+                        '<div class="contact-name">' + escapeHtml(d.contact.name) + '</div>' +
+                        '<div class="contact-meta">' +
+                            (d.contact.company ? escapeHtml(d.contact.company) : '') +
+                            (d.contact.position ? (d.contact.company ? ' &middot; ' : '') + escapeHtml(d.contact.position) : '') +
+                        '</div>' +
+                        '<div class="contact-tags">' +
+                            (d.sectors || []).map(function(s) { return '<span class="contact-tag">' + escapeHtml(s) + '</span>'; }).join('') +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="contact-badge" style="color:' + impColor + ';border-color:' + impColor + '">' + impLabel + '</div>';
+
+                list.appendChild(card);
+            });
+        }
+
+        function openContact(d) {
+            var modal = document.getElementById('contactModal');
+            var content = document.getElementById('contactModalContent');
+            var impColor = impColors[d.importance] || '#555';
+            var impLabel = impLabelsRu[d.importance] || d.importance;
+            var circleLabel = circleLabelsRu[d.functionalCircle] || d.functionalCircle;
+            var initials = d.contact.name.split(' ').map(function(w) { return w[0] || ''; }).join('').substring(0, 2).toUpperCase();
+
+            var html = '<div class="modal-profile">';
+            html += '<div class="modal-avatar" style="border-color:' + impColor + '">' + initials + '</div>';
+            html += '<h2>' + escapeHtml(d.contact.name) + '</h2>';
+            if (d.contact.company || d.contact.position) {
+                html += '<p class="modal-subtitle">' +
+                    (d.contact.company ? escapeHtml(d.contact.company) : '') +
+                    (d.contact.position ? (d.contact.company ? ' &middot; ' : '') + escapeHtml(d.contact.position) : '') +
+                    '</p>';
+            }
+            html += '</div>';
+
+            html += '<div class="modal-badges">';
+            html += '<span class="modal-badge" style="color:' + impColor + ';border-color:' + impColor + '">' + impLabel + '</span>';
+            html += '<span class="modal-badge">' + circleLabel.toUpperCase() + '</span>';
+            (d.sectors || []).forEach(function(s) {
+                html += '<span class="modal-badge badge-sector">' + escapeHtml(s).toUpperCase() + '</span>';
+            });
+            html += '</div>';
+
+            if (d.contact.phoneNumbers && d.contact.phoneNumbers.length > 0) {
+                html += '<div class="modal-field"><span class="modal-field-label">ТЕЛЕФОН</span>';
+                d.contact.phoneNumbers.forEach(function(p) {
+                    html += '<span class="modal-field-value">' + escapeHtml(p) + '</span>';
+                });
+                html += '</div>';
+            }
+            if (d.contact.emails && d.contact.emails.length > 0) {
+                html += '<div class="modal-field"><span class="modal-field-label">EMAIL</span>';
+                d.contact.emails.forEach(function(e) {
+                    html += '<span class="modal-field-value">' + escapeHtml(e) + '</span>';
+                });
+                html += '</div>';
+            }
+            if (d.contact.goal) {
+                html += '<div class="modal-field"><span class="modal-field-label">ЦЕЛЬ</span><span class="modal-field-value">' + escapeHtml(d.contact.goal) + '</span></div>';
+            }
+            if (d.contact.notes) {
+                html += '<div class="modal-field"><span class="modal-field-label">ЗАМЕТКИ</span><span class="modal-field-value">' + escapeHtml(d.contact.notes) + '</span></div>';
+            }
+
+            if (d.powerGrouping) {
+                html += '<div class="modal-field"><span class="modal-field-label">ГРУППИРОВКА</span><span class="modal-field-value">' + escapeHtml(d.powerGrouping.groupName) + '</span></div>';
+            }
+
+            if (d.diary && d.diary.length > 0) {
+                html += '<div class="modal-diary"><h3>ДНЕВНИК</h3>';
+                d.diary.slice().sort(function(a, b) { return new Date(b.date) - new Date(a.date); }).forEach(function(entry) {
+                    var dateStr = new Date(entry.date).toLocaleDateString('ru-RU');
+                    html += '<div class="diary-entry">';
+                    html += '<span class="diary-date">' + dateStr + '</span>';
+                    html += '<span class="diary-content">' + escapeHtml(entry.content) + '</span>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            content.innerHTML = html;
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeContactModal(event) {
+            if (event && event.target !== document.getElementById('contactModal')) return;
+            document.getElementById('contactModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+
+        // ---- Init ----
+        (function init() {
+            if (storedPhone) {
+                loadDashboard();
+            }
+        })();
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeContactModal();
+            }
+        });
+
+        // Spin animation
+        var style = document.createElement('style');
+        style.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>

@@ -1,12 +1,10 @@
 import { useApp } from '@/contexts/AppContext';
-import { ADS_CONFIG, getInlineAdPositions, shouldShowInterstitial } from '@/lib/ads';
-import { whenYandexAdsReady } from '@/lib/yandex-ads-init';
 import { router } from 'expo-router';
 import {
   BookOpen,
   Network as NetworkIcon,
   Palette,
-
+  Cigarette,
   Search,
   Shield,
   FileText,
@@ -14,6 +12,12 @@ import {
   X,
   User,
   Globe,
+  MessageSquare,
+  Bell,
+  Lightbulb,
+  Crown,
+  Brain,
+  PenTool,
 } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -29,7 +33,6 @@ import {
   Modal,
   Alert,
   Platform,
-  InteractionManager,
   ActivityIndicator,
   useWindowDimensions,
   Pressable,
@@ -39,51 +42,70 @@ import { DossierPane } from '@/components/DossierPane';
 import { ContactDossier } from '@/types';
 import NetworkScreen from './network';
 import ProfileScreen from './profile';
-
-import { NativeAdBlock } from '@/components/NativeAdBlock';
-import { YandexBanner } from '@/components/YandexBanner';
-
-let AdRequestConfigClass: any = null;
-let InterstitialAdLoaderClass: any = null;
-
-if (Platform.OS !== 'web') {
-  try {
-    const yma = require('yandex-mobile-ads');
-    AdRequestConfigClass = yma.AdRequestConfiguration;
-    InterstitialAdLoaderClass = yma.InterstitialAdLoader;
-  } catch (e) {
-    console.warn('[ads] yandex-mobile-ads not available');
-  }
-}
-
-async function showInterstitialAd() {
-  if (!InterstitialAdLoaderClass || !AdRequestConfigClass) return;
-  try {
-    await whenYandexAdsReady();
-    if (Platform.OS === 'ios') {
-      await new Promise<void>((resolve) => {
-        InteractionManager.runAfterInteractions(() => resolve());
-      });
-    }
-    const loader = await InterstitialAdLoaderClass.create();
-    const config = new AdRequestConfigClass({ adUnitId: ADS_CONFIG.INTERSTITIAL_ID });
-    const ad = await loader.loadAd(config);
-    await ad.show();
-  } catch (e) {
-    console.warn('[ads] interstitial error:', e);
-  }
-}
+import StrategyScreen from './strategy';
+import AnalysisScreen from './analysis';
+import ActionsScreen from './actions';
+import ClubScreen from './club';
 
 type OpenDossierHandler = (payload: { id: string; edit?: boolean }) => void;
 
+function getMaintenanceInfoForDossier(dossier: ContactDossier): { status: 'green' | 'yellow' | 'red' | 'inactive'; daysLeft: number; recommendedDays: number } | null {
+  if (dossier.noDirectConnection) {
+    return { status: 'inactive', daysLeft: 0, recommendedDays: 0 };
+  }
+
+  const importanceWeights: Record<string, number> = {
+    critical: 14,
+    high: 21,
+    medium: 45,
+    low: 90,
+  };
+  let recommendedDays = importanceWeights[dossier.importance] ?? 45;
+
+  if (dossier.assessment) {
+    const vi = dossier.assessment.valueIndex;
+    if (vi >= 75) {
+      recommendedDays = Math.min(recommendedDays, 14);
+    } else if (vi >= 50) {
+      recommendedDays = Math.min(recommendedDays, 28);
+    } else if (vi >= 30) {
+      recommendedDays = Math.max(recommendedDays, 45);
+    }
+  }
+
+  const lastDate = dossier.lastInteraction
+    ? new Date(dossier.lastInteraction)
+    : dossier.diary && dossier.diary.length > 0
+      ? new Date(Math.max(...dossier.diary.map(e => new Date(e.date).getTime())))
+      : null;
+
+  if (!lastDate) {
+    return { status: 'red', daysLeft: -recommendedDays, recommendedDays };
+  }
+
+  const now = new Date();
+  const daysSinceLast = Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+  const daysLeft = recommendedDays - daysSinceLast;
+
+  let status: 'green' | 'yellow' | 'red';
+  if (daysLeft <= 0) {
+    status = 'red';
+  } else if (daysLeft <= Math.ceil(recommendedDays * 0.3)) {
+    status = 'yellow';
+  } else {
+    status = 'green';
+  }
+
+  return { status, daysLeft, recommendedDays };
+}
+
 function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) {
-  const { dossiers, addDossier, theme, t, subscriptionLevel } = useApp();
+  const { dossiers, addDossier, theme, t, goals } = useApp();
   const [search, setSearch] = useState('');
   const [showContactsModal, setShowContactsModal] = useState(false);
   const [phoneContacts, setPhoneContacts] = useState<any[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
-  const [showLimitModal, setShowLimitModal] = useState(false);
 
   const styles = createStyles(theme);
 
@@ -106,25 +128,6 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
     );
   });
 
-  const listWithAds = useMemo(() => {
-    const showAds = subscriptionLevel !== 'working' && Platform.OS !== 'web';
-    if (!showAds || filteredDossiers.length < 4) {
-      return filteredDossiers.map((d, i) => ({ type: 'dossier' as const, data: d, originalIndex: i }));
-    }
-    const adPositions = new Set(getInlineAdPositions(filteredDossiers.length));
-    const result: Array<
-      | { type: 'dossier'; data: ContactDossier; originalIndex: number }
-      | { type: 'ad'; slotIndex: number }
-    > = [];
-    filteredDossiers.forEach((d, i) => {
-      result.push({ type: 'dossier', data: d, originalIndex: i });
-      if (adPositions.has(i)) {
-        result.push({ type: 'ad', slotIndex: result.filter((x) => x.type === 'ad').length });
-      }
-    });
-    return result;
-  }, [filteredDossiers, subscriptionLevel]);
-
   const loadContacts = async () => {
     if (Platform.OS === 'web') {
       Alert.alert(t.dossiers.notAvailable, t.dossiers.contactAccessWeb);
@@ -134,16 +137,12 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
     setIsLoadingContacts(true);
     try {
       const Contacts = await import('expo-contacts');
-      let status = (await Contacts.getPermissionsAsync()).status;
-      if (status !== 'granted') {
-        const { status: requested } = await Contacts.requestPermissionsAsync();
-        status = requested;
-      }
+      const { status } = await Contacts.requestPermissionsAsync();
       if (status === 'granted') {
         const { data } = await Contacts.getContactsAsync({
-          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Company, Contacts.Fields.JobTitle],
+          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Image, Contacts.Fields.Company, Contacts.Fields.JobTitle],
         });
-        setPhoneContacts(data || []);
+        setPhoneContacts(data);
         setShowContactsModal(true);
       } else {
         Alert.alert(t.dossiers.permissionDenied, t.dossiers.contactPermissionRequired);
@@ -182,12 +181,6 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
       addedDate: new Date(),
     };
     const result = addDossier(newDossier);
-    if (!result.ok && result.error === 'LIMIT_EXCEEDED') {
-      setShowContactsModal(false);
-      setContactSearch('');
-      setShowLimitModal(true);
-      return;
-    }
     if (!result.ok && result.error === 'DUPLICATE') {
       setShowContactsModal(false);
       setContactSearch('');
@@ -232,94 +225,32 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
     }
   };
 
-  const isOverLimit = subscriptionLevel !== 'working' && dossiers.length > 20;
-
-  const showLimitAlert = () => {
-    setShowLimitModal(true);
-  };
-
-  const renderListItem = ({
-    item,
-  }: {
-    item:
-      | { type: 'dossier'; data: ContactDossier; originalIndex: number }
-      | { type: 'ad'; slotIndex: number };
-  }) => {
-    if (item.type === 'ad') {
-      return <NativeAdBlock />;
-    }
-    return renderDossier({ item: item.data, index: item.originalIndex });
-  };
-
-  const renderDossier = ({ item, index }: { item: ContactDossier; index: number }) => {
-    const isLocked = isOverLimit && index >= 20;
-
-    if (isLocked) {
-      return (
-        <TouchableOpacity
-          style={styles.dossierCard}
-          onPress={showLimitAlert}
-          activeOpacity={0.7}
-        >
-          <View style={styles.lockedOverlay}>
-            <View style={styles.dossierHeader}>
-              <View style={styles.dossierIcon}>
-                <FileText size={20} color={theme.primaryDim} />
-              </View>
-              <View style={styles.dossierInfo}>
-                <Text style={[styles.dossierName, { color: theme.primaryDim, opacity: 0.4 }]}>
-                  {'●●●●●● ●●●●●●●●'}
-                </Text>
-                <Text style={[styles.dossierMeta, { opacity: 0.3 }]}>
-                  {'●●●●●●●●●●●●'}
-                </Text>
-              </View>
-              <View style={[styles.importanceBadge, { borderColor: theme.danger }]}>
-                <Text style={[styles.importanceText, { color: theme.danger }]}>LOCKED</Text>
-              </View>
-            </View>
-            {index === 20 && (
-              <View style={styles.lockedBanner}>
-                <Text style={styles.lockedBannerTitle}>ЛИМИТ КОНТАКТОВ</Text>
-                <Text style={styles.lockedBannerText}>
-                  Допуск 1 — максимум 20 контактов. Повысьте допуск для доступа.
-                </Text>
-                <Text style={styles.lockedBannerLink}>ПОДРОБНЕЕ →</Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
-      );
-    }
-
-    return (
-      <TouchableOpacity
-        style={styles.dossierCard}
-        onPress={() => {
-          if (subscriptionLevel !== 'working' && shouldShowInterstitial()) {
-            showInterstitialAd();
-          }
-          if (onOpenDossier) {
-            onOpenDossier({ id: item.contact.id });
-          } else {
-            router.push({ pathname: '/dossier/[id]' as any, params: { id: item.contact.id } });
-          }
-        }}
-        activeOpacity={0.7}
-      >
-        <View style={styles.dossierHeader}>
-          <View style={styles.dossierIcon}>
-            <FileText size={20} color={theme.primary} />
-          </View>
-          <View style={styles.dossierInfo}>
-            <Text style={styles.dossierName}>{item.contact.name}</Text>
-            {item.powerGrouping?.groupName && (
-              <Text style={styles.powerGroupingName}>{item.powerGrouping.groupName.toUpperCase()}</Text>
-            )}
-            <Text style={styles.dossierMeta}>
-              {item.contact.position || t.dossiers.unknownPosition}
-            </Text>
-          </View>
+  const renderDossier = ({ item }: { item: ContactDossier }) => (
+    <TouchableOpacity
+      style={styles.dossierCard}
+      onPress={() => {
+        if (onOpenDossier) {
+          onOpenDossier({ id: item.contact.id });
+        } else {
+          router.push({ pathname: '/dossier/[id]' as any, params: { id: item.contact.id } });
+        }
+      }}
+      activeOpacity={0.7}
+    >
+      <View style={styles.dossierHeader}>
+        <View style={styles.dossierIcon}>
+          <FileText size={20} color={theme.primary} />
+        </View>
+        <View style={styles.dossierInfo}>
+          <Text style={styles.dossierName}>{item.contact.name}</Text>
+          {item.powerGrouping?.groupName ? (
+            <Text style={styles.powerGroupingName}>{item.powerGrouping.groupName.toUpperCase()}</Text>
+          ) : null}
+          <Text style={styles.dossierMeta}>
+            {item.contact.position || t.dossiers.unknownPosition}
+          </Text>
+        </View>
+        <View style={styles.badgesColumn}>
           <View
             style={[
               styles.importanceBadge,
@@ -335,15 +266,42 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
               {item.importance.toUpperCase()}
             </Text>
           </View>
-        </View>
-        <View style={styles.dossierFooter}>
-          {item.contact.goal && (
-            <Text style={styles.dossierGoal}>{item.contact.goal}</Text>
+          {item.noDirectConnection && (
+            <View style={styles.noConnectionBadge}>
+              <Text style={styles.noConnectionText}>{t.contact.noDirectConnection}</Text>
+            </View>
           )}
+          {(() => {
+            const mInfo = getMaintenanceInfoForDossier(item);
+            if (!mInfo || mInfo.status === 'inactive') return null;
+            if (mInfo.daysLeft > 5) return null;
+            const badgeColor = mInfo.daysLeft <= 0 ? '#dc2626' : mInfo.daysLeft <= 3 ? '#d97706' : '#059669';
+            const badgeLabel = mInfo.daysLeft <= 0
+              ? `${t.contact?.maintainBadge ?? 'Поддержи связь'} (${Math.abs(mInfo.daysLeft)}${t.contact?.maintainDaysLeft ?? 'д'} ${t.contact?.maintainOverdue ?? 'просроч.'})`
+              : `${t.contact?.maintainBadge ?? 'Поддержи связь'} (${mInfo.daysLeft}${t.contact?.maintainDaysLeft ?? 'д'})`;
+            return (
+              <View style={[styles.maintenanceListBadge, { borderColor: badgeColor }]}>
+                <Text style={[styles.maintenanceListBadgeText, { color: badgeColor }]}>
+                  {badgeLabel}
+                </Text>
+              </View>
+            );
+          })()}
         </View>
-      </TouchableOpacity>
-    );
-  };
+      </View>
+      <View style={styles.dossierFooter}>
+        {(() => {
+          const linkedGoals = goals.filter(g => (g.contactIds || []).includes(item.contact.id));
+          if (linkedGoals.length === 0) return null;
+          return (
+            <Text style={styles.dossierGoal}>
+              {linkedGoals.map(g => g.title).join(', ')}
+            </Text>
+          );
+        })()}
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.background} testID="dossiersTabRoot">
@@ -391,18 +349,11 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
         ) : (
           <>
             <FlatList
-              data={listWithAds}
-              renderItem={renderListItem}
-              keyExtractor={(item) =>
-                item.type === 'dossier' ? item.data.contact.id : `ad_${item.slotIndex}`
-              }
+              data={filteredDossiers}
+              renderItem={renderDossier}
+              keyExtractor={(item) => item.contact.id}
               contentContainerStyle={styles.list}
               showsVerticalScrollIndicator={false}
-              ListFooterComponent={
-                subscriptionLevel !== 'working' && Platform.OS !== 'web' ? (
-                  <YandexBanner />
-                ) : null
-              }
             />
             <View style={styles.fabContainer}>
               <TouchableOpacity
@@ -420,44 +371,6 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
             </View>
           </>
         )}
-
-        <Modal
-          visible={showLimitModal}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowLimitModal(false)}
-        >
-          <View style={styles.limitModalBackdrop}>
-            <View style={styles.limitModalBox}>
-              <Shield size={32} color={theme.danger} strokeWidth={1.5} />
-              <Text style={styles.limitModalTitle}>ЛИМИТ КОНТАКТОВ</Text>
-              <Text style={styles.limitModalText}>
-                Ваш УРОВЕНЬ ДОПУСКА: 1.{'\n'}
-                Лимит контактов: 20.{'\n'}
-                Войдите в Ваш профиль на WEB странице системы, для повышения уровня допуска.
-              </Text>
-              <View style={styles.limitModalButtons}>
-                <TouchableOpacity
-                  style={styles.limitModalBtnCancel}
-                  onPress={() => setShowLimitModal(false)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.limitModalBtnCancelText}>ЗАКРЫТЬ</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.limitModalBtnAction}
-                  onPress={() => {
-                    setShowLimitModal(false);
-                    router.push('/(tabs)/profile' as any);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.limitModalBtnActionText}>ПРОФИЛЬ</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
 
         <Modal
           visible={showContactsModal}
@@ -492,8 +405,8 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
               </View>
 
               <FlatList
-                data={phoneContacts.filter((c) =>
-                  !contactSearch ||
+                data={phoneContacts.filter(c => 
+                  !contactSearch || 
                   (c.name && c.name.toLowerCase().includes(contactSearch.toLowerCase())) ||
                   (c.phoneNumbers && c.phoneNumbers.some((p: any) => p.number?.includes(contactSearch))) ||
                   (c.emails && c.emails.some((e: any) => e.email?.toLowerCase().includes(contactSearch.toLowerCase())))
@@ -513,9 +426,9 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
                       {item.phoneNumbers && item.phoneNumbers.length > 0 && (
                         <Text style={styles.contactDetail}>{item.phoneNumbers[0].number}</Text>
                       )}
-                      {item.company && (
+                      {item.company ? (
                         <Text style={styles.contactDetail}>{item.company}</Text>
-                      )}
+                      ) : null}
                     </View>
                   </TouchableOpacity>
                 )}
@@ -531,18 +444,66 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
 }
 
 type WebDossierPaneMode = 'list' | 'dossier';
+type WebRightPaneTab = 'network' | 'strategy' | 'analysis' | 'actions';
+
 
 function WebSplitView() {
-  const { theme } = useApp();
+  const { theme, t } = useApp();
   const { width } = useWindowDimensions();
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
+  const [isClubOpen, setIsClubOpen] = useState<boolean>(false);
+
+  const clubOverlayWidth = Math.min(480, Math.max(340, Math.floor(width * 0.38)));
+  const clubTranslateX = useRef<Animated.Value>(new Animated.Value(-(clubOverlayWidth + 24))).current;
+  const clubOpacity = useRef<Animated.Value>(new Animated.Value(0)).current;
   const [paneMode, setPaneMode] = useState<WebDossierPaneMode>('list');
   const [selectedDossierId, setSelectedDossierId] = useState<string | null>(null);
   const [selectedDossierEditing, setSelectedDossierEditing] = useState<boolean>(false);
+  const [rightPaneTab, setRightPaneTab] = useState<WebRightPaneTab>('network');
+  const [webGoalId, setWebGoalId] = useState<string | null>(null);
 
   const overlayWidth = Math.min(520, Math.max(360, Math.floor(width * 0.42)));
   const translateX = useRef<Animated.Value>(new Animated.Value(overlayWidth + 24)).current;
   const overlayOpacity = useRef<Animated.Value>(new Animated.Value(0)).current;
+
+  const openClub = useCallback(() => {
+    setIsClubOpen(true);
+    clubTranslateX.setValue(-(clubOverlayWidth + 24));
+    clubOpacity.setValue(0);
+    Animated.parallel([
+      Animated.timing(clubTranslateX, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(clubOpacity, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [clubOpacity, clubOverlayWidth, clubTranslateX]);
+
+  const closeClub = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(clubTranslateX, {
+        toValue: -(clubOverlayWidth + 24),
+        duration: 200,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(clubOpacity, {
+        toValue: 0,
+        duration: 140,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) setIsClubOpen(false);
+    });
+  }, [clubOpacity, clubOverlayWidth, clubTranslateX]);
 
   const openProfile = useCallback(() => {
     setIsProfileOpen(true);
@@ -593,10 +554,78 @@ function WebSplitView() {
     []
   );
 
+  const clubRailItems = useMemo(
+    () => [
+      { key: 'networking_theory', icon: MessageSquare },
+      { key: 'practice_cases', icon: Lightbulb },
+      { key: 'strategic_center', icon: Shield },
+      { key: 'analytical_node', icon: Brain },
+      { key: 'club_elite', icon: Crown },
+      { key: 'authors_column', icon: PenTool },
+      { key: 'notifications', icon: Bell },
+      { key: 'my_profile', icon: User },
+      { key: 'rules', icon: BookOpen },
+    ],
+    []
+  );
+
   const styles = createWebSplitStyles(theme);
 
   return (
     <View style={styles.root} testID="webSplitRoot">
+      <View style={styles.clubRail} testID="webClubRail">
+        <TouchableOpacity
+          style={styles.clubRailLogo}
+          onPress={isClubOpen ? closeClub : openClub}
+          activeOpacity={0.7}
+          testID="webClubToggle"
+        >
+          <Cigarette size={20} color={theme.primary} />
+        </TouchableOpacity>
+        <View style={styles.clubRailDivider} />
+        {clubRailItems.map((item) => (
+          <TouchableOpacity
+            key={item.key}
+            style={styles.clubRailButton}
+            onPress={isClubOpen ? closeClub : openClub}
+            activeOpacity={0.7}
+            testID={`clubRailBtn_${item.key}`}
+          >
+            <item.icon size={18} color={theme.primaryDim} />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {isClubOpen && (
+        <View style={styles.clubOverlayHost} testID="clubOverlayHost">
+          <Pressable style={styles.backdrop} onPress={closeClub} testID="clubOverlayBackdrop" />
+          <Animated.View
+            style={[
+              styles.clubOverlay,
+              {
+                width: clubOverlayWidth,
+                transform: [{ translateX: clubTranslateX }],
+                opacity: clubOpacity,
+              },
+            ]}
+            testID="clubOverlay"
+          >
+            <View style={styles.clubOverlayHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Cigarette size={16} color={theme.primary} />
+                <Text style={styles.clubOverlayTitle}>{t.tabs.club}</Text>
+              </View>
+              <TouchableOpacity onPress={closeClub} activeOpacity={0.7} testID="clubOverlayClose">
+                <X size={20} color={theme.primary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.clubOverlayBody}>
+              <ClubScreen />
+            </View>
+          </Animated.View>
+        </View>
+      )}
+
       <View style={styles.leftPane} testID="webSplitLeftPane">
         {paneMode === 'list' || !selectedDossierId ? (
           <DossiersTab
@@ -619,20 +648,56 @@ function WebSplitView() {
             onOpenNetwork={() => {
               console.log('[WebSplitView] dossier requested open network; map is already visible');
             }}
+            onOpenGoal={(goalId) => {
+              console.log('[WebSplitView] open goal in strategy pane', { goalId });
+              setWebGoalId(goalId);
+              setRightPaneTab('strategy');
+            }}
           />
         )}
       </View>
 
       <View style={styles.rightPane} testID="webSplitRightPane">
-        <View style={styles.mapPane} testID="webSplitMapPane">
-          <NetworkScreen
-            onOpenDossier={({ id, edit }) => {
-              console.log('[WebSplitView] open dossier from map', { id, edit });
-              setSelectedDossierId(id);
-              setSelectedDossierEditing(!!edit);
-              setPaneMode('dossier');
-            }}
-          />
+        <View style={styles.rightPaneContent}>
+          <View style={styles.webTabBar}>
+            {(['network', 'strategy', 'analysis', 'actions'] as WebRightPaneTab[]).map(tab => {
+              const isActive = rightPaneTab === tab;
+              const labels: Record<WebRightPaneTab, string> = {
+                network: t.tabs.network,
+                strategy: t.tabs.strategy,
+                analysis: t.tabs.analysis,
+                actions: t.tabs.actions,
+              };
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.webTabItem, isActive && styles.webTabItemActive]}
+                  onPress={() => setRightPaneTab(tab)}
+                  activeOpacity={0.7}
+                  testID={`webTab_${tab}`}
+                >
+                  <Text style={[styles.webTabText, isActive && styles.webTabTextActive]}>
+                    {labels[tab]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={styles.mapPane} testID="webSplitMapPane">
+            {rightPaneTab === 'network' && (
+              <NetworkScreen
+                onOpenDossier={({ id, edit }) => {
+                  console.log('[WebSplitView] open dossier from map', { id, edit });
+                  setSelectedDossierId(id);
+                  setSelectedDossierEditing(!!edit);
+                  setPaneMode('dossier');
+                }}
+              />
+            )}
+            {rightPaneTab === 'strategy' && <StrategyScreen initialGoalId={webGoalId ?? undefined} />}
+            {rightPaneTab === 'analysis' && <AnalysisScreen />}
+            {rightPaneTab === 'actions' && <ActionsScreen />}
+          </View>
         </View>
 
         <View style={styles.rail} testID="webSplitProfileRail">
@@ -745,37 +810,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
-  lockedOverlay: {
-    opacity: 0.6,
-  },
-  lockedBanner: {
-    marginTop: 8,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: theme.danger,
-  },
-  lockedBannerTitle: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: theme.danger,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 2,
-    marginBottom: 4,
-  },
-  lockedBannerText: {
-    fontSize: 11,
-    color: theme.primaryDim,
-    fontFamily: 'monospace' as const,
-    lineHeight: 16,
-    marginBottom: 6,
-  },
-  lockedBannerLink: {
-    fontSize: 11,
-    fontWeight: '700' as const,
-    color: theme.primary,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 1,
-  },
   dossierHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -818,6 +852,36 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: '700' as const,
     fontFamily: 'monospace' as const,
     letterSpacing: 1,
+  },
+  badgesColumn: {
+    alignItems: 'flex-end' as const,
+    gap: 4,
+  },
+  noConnectionBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: theme.danger ?? theme.primary,
+    borderRadius: 4,
+    alignSelf: 'flex-end' as const,
+  },
+  noConnectionText: {
+    fontSize: 10,
+    color: theme.danger ?? theme.primary,
+    fontFamily: 'monospace' as const,
+    fontWeight: '600' as const,
+  },
+  maintenanceListBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderRadius: 4,
+  },
+  maintenanceListBadgeText: {
+    fontSize: 9,
+    fontFamily: 'monospace' as const,
+    fontWeight: '700' as const,
+    letterSpacing: 0.5,
   },
   dossierFooter: {
     flexDirection: 'row',
@@ -957,74 +1021,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.textSecondary,
     fontFamily: 'monospace' as const,
   },
-  limitModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  limitModalBox: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: theme.card,
-    borderWidth: 2,
-    borderColor: theme.danger,
-    padding: 28,
-    alignItems: 'center',
-  },
-  limitModalTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: theme.danger,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 3,
-    marginTop: 16,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  limitModalText: {
-    fontSize: 13,
-    color: theme.text,
-    fontFamily: 'monospace' as const,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  limitModalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  limitModalBtnCancel: {
-    flex: 1,
-    borderWidth: 2,
-    borderColor: theme.border,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  limitModalBtnCancelText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: theme.textSecondary,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 2,
-  },
-  limitModalBtnAction: {
-    flex: 1,
-    borderWidth: 2,
-    borderColor: theme.primary,
-    backgroundColor: theme.overlay,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  limitModalBtnActionText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: theme.primary,
-    fontFamily: 'monospace' as const,
-    letterSpacing: 2,
-  },
 });
 
 const createWebSplitStyles = (theme: any) => {
@@ -1046,6 +1042,37 @@ const createWebSplitStyles = (theme: any) => {
       flex: 1,
       flexDirection: 'row',
       backgroundColor: theme.background,
+    },
+    rightPaneContent: {
+      flex: 1,
+      flexDirection: 'column',
+    },
+    webTabBar: {
+      flexDirection: 'row',
+      borderBottomWidth: 2,
+      borderBottomColor: theme.border,
+      backgroundColor: theme.overlay,
+    },
+    webTabItem: {
+      flex: 1,
+      paddingVertical: 10,
+      alignItems: 'center',
+      borderBottomWidth: 2,
+      borderBottomColor: 'transparent',
+    },
+    webTabItemActive: {
+      borderBottomColor: theme.primary,
+      backgroundColor: theme.background,
+    },
+    webTabText: {
+      fontSize: 11,
+      fontWeight: '700' as const,
+      color: theme.primaryDim,
+      fontFamily: 'monospace' as const,
+      letterSpacing: 1,
+    },
+    webTabTextActive: {
+      color: theme.primary,
     },
     mapPane: {
       flex: 1,
@@ -1136,6 +1163,86 @@ const createWebSplitStyles = (theme: any) => {
       fontFamily: 'monospace' as const,
     },
     profileOverlayBody: {
+      flex: 1,
+    },
+    clubRail: {
+      width: railWidth,
+      backgroundColor: theme.background,
+      borderRightWidth: 2,
+      borderRightColor: theme.border,
+      alignItems: 'center',
+      paddingTop: 10,
+    },
+    clubRailLogo: {
+      width: railWidth - 16,
+      height: 38,
+      borderWidth: 2,
+      borderColor: theme.primary,
+      backgroundColor: theme.overlay,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: theme.primary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    clubRailDivider: {
+      width: railWidth - 18,
+      height: 2,
+      backgroundColor: theme.border,
+      marginVertical: 10,
+    },
+    clubRailButton: {
+      width: railWidth - 16,
+      height: 38,
+      borderWidth: 2,
+      borderColor: theme.border,
+      backgroundColor: theme.overlay,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+    },
+    clubOverlayHost: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      zIndex: 20,
+    },
+    clubOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      bottom: 0,
+      backgroundColor: theme.background,
+      borderRightWidth: 2,
+      borderRightColor: theme.border,
+      shadowColor: '#000',
+      shadowOffset: { width: 8, height: 0 },
+      shadowOpacity: 0.22,
+      shadowRadius: 18,
+      elevation: 8,
+    },
+    clubOverlayHeader: {
+      height: 56,
+      borderBottomWidth: 2,
+      borderBottomColor: theme.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 14,
+      backgroundColor: theme.overlay,
+    },
+    clubOverlayTitle: {
+      fontSize: 12,
+      fontWeight: '800' as const,
+      letterSpacing: 3,
+      color: theme.primary,
+      fontFamily: 'monospace' as const,
+    },
+    clubOverlayBody: {
       flex: 1,
     },
   });
