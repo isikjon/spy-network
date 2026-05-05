@@ -101,7 +101,7 @@
       "bundler": "metro"
     },
     "experiments": {
-      "baseUrl": "/app",
+      "baseUrl": "/devsborka/app",
       "typedRoutes": true
     },
     "owner": "eltempo9999-sketch"

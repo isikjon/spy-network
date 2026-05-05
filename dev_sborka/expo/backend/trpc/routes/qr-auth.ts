@@ -2,6 +2,7 @@ import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { storeGet, storeSet, storeDelete } from "../../store";
 import { createUserSession } from "../utils/user-session";
+import { getOrCreateUid } from "../utils/uid-manager";
 
 /**
  * QR-авторизация для веб-версии.
@@ -18,6 +19,7 @@ type QrSession = {
   sessionId: string;
   status: "pending" | "confirmed" | "rejected";
   phone?: string;
+  uid?: string;
   token?: string;
   createdAt: number;
   expiresAt: number;
@@ -89,6 +91,7 @@ export const qrAuthRouter = createTRPCRouter({
           ok: true as const,
           token: session.token,
           phone: session.phone,
+          uid: session.uid ?? "",
         };
       }
 
@@ -127,10 +130,12 @@ export const qrAuthRouter = createTRPCRouter({
       }
 
       // Создаём новую веб-сессию для этого пользователя
-      const webSession = await createUserSession(ctx.userPhone);
+      const uid = ctx.userUid || await getOrCreateUid(ctx.userPhone);
+      const webSession = await createUserSession(ctx.userPhone, uid);
 
       session.status = "confirmed";
       session.phone = ctx.userPhone;
+      session.uid = uid;
       session.token = webSession.token;
 
       await storeSet(qrKey(input.sessionId), session);
@@ -176,10 +181,11 @@ export const qrAuthRouter = createTRPCRouter({
       }
 
       const devPhone = "71111111111";
+      const devUid = await getOrCreateUid(devPhone);
 
       // Добавляем тестовую карту для dev-аккаунта, чтобы показать UI отвязки карты
       const { storeGet: get, storeSet: set } = await import("../../store");
-      const cardKey = `user:${devPhone}:payment_method`;
+      const cardKey = `user:${devUid}:payment_method`;
       const existing = await get(cardKey);
       if (!existing) {
         await set(cardKey, {
@@ -192,11 +198,11 @@ export const qrAuthRouter = createTRPCRouter({
 
       // Ставим уровень 2 для dev
       const { setUserLevel } = await import("../utils/user-level");
-      await setUserLevel(devPhone, 2, Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await setUserLevel(devUid, 2, Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-      const session = await createUserSession(devPhone);
-      console.log("[qr-auth] devLogin: dev session created", { phone: devPhone });
+      const session = await createUserSession(devPhone, devUid);
+      console.log("[qr-auth] devLogin: dev session created", { phone: devPhone, uid: devUid });
 
-      return { ok: true as const, phone: devPhone, token: session.token };
+      return { ok: true as const, phone: devPhone, uid: devUid, token: session.token };
     }),
 });

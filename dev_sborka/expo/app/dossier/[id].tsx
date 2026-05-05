@@ -26,7 +26,7 @@ import {
   ChevronRight,
   Heart,
 } from 'lucide-react-native';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -42,12 +42,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DiaryEntry, Sector, FunctionalCircle, ImportanceLevel, ContactRelation } from '@/types';
+import { OsintBlock } from '@/components/OsintBlock';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Contacts from 'expo-contacts';
 
 export default function DossierScreen() {
-  const { id, edit } = useLocalSearchParams<{ id: string; edit?: string }>();
+  const { id, edit, section } = useLocalSearchParams<{ id: string; edit?: string; section?: string }>();
   const { dossiers, updateDossier, deleteDossier, theme, sectors: userSectors, powerGroupings, addPowerGrouping, goals, t } = useApp();
   const [isAddingEntry, setIsAddingEntry] = useState(false);
   const [newEntry, setNewEntry] = useState('');
@@ -55,6 +56,9 @@ export default function DossierScreen() {
   const [editingEntryContent, setEditingEntryContent] = useState('');
   const [isEditing, setIsEditing] = useState(edit === 'true');
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const maintenanceSectionY = useRef<number>(0);
+  const hasScrolledToMaintenance = useRef<boolean>(false);
 
   const initializedForIdRef = useRef<string | null>(null);
   const dossierRef = useRef<typeof dossier | undefined>(undefined);
@@ -69,6 +73,7 @@ export default function DossierScreen() {
   const [editCircle, setEditCircle] = useState<FunctionalCircle>('support');
   const [editImportance, setEditImportance] = useState<ImportanceLevel>('medium');
   const [editPhoto, setEditPhoto] = useState<string | undefined>();
+  const [editBirthday, setEditBirthday] = useState<string>('');
   const [editRelations, setEditRelations] = useState<ContactRelation[]>([]);
   const [isConnectionsExpanded, setIsConnectionsExpanded] = useState(false);
   const [editGoal, setEditGoal] = useState('');
@@ -93,6 +98,12 @@ export default function DossierScreen() {
   useEffect(() => {
     dossierRef.current = dossier;
   }, [dossier]);
+
+  const allContactNamesMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    dossiers.forEach(d => { map[d.contact.id] = d.contact.name; });
+    return map;
+  }, [dossiers]);
 
   const sectors: Sector[] = userSectors as Sector[];
   const circles: FunctionalCircle[] = ['support', 'productivity', 'development'];
@@ -130,6 +141,7 @@ export default function DossierScreen() {
     setEditCircle(dossier.functionalCircle);
     setEditImportance(dossier.importance);
     setEditPhoto(dossier.contact.photo);
+    setEditBirthday(dossier.contact.birthday || '');
     setEditRelations(dossier.relations || []);
     setEditGoal(dossier.contact.goal || '');
     setEditPowerGroupName(dossier.powerGrouping?.groupName || '');
@@ -152,6 +164,7 @@ export default function DossierScreen() {
         position: editPosition || undefined,
         company: editCompany || undefined,
         goal: editGoal || undefined,
+        birthday: editBirthday || undefined,
         phoneNumbers: editPhones.filter((p) => p.trim()),
         emails: editEmails.filter((e) => e.trim()),
         photo: editPhoto,
@@ -170,7 +183,7 @@ export default function DossierScreen() {
       nextAction: editNextAction || undefined,
       nextActionDate: editNextActionDate || undefined,
     });
-  }, [editCircle, editCompany, editEmails, editGoal, editImportance, editName, editNextAction, editNextActionDate, editPhones, editPhoto, editPowerGroupName, editRelations, editSectors, editPosition, editSuzerainId, editVassalIds, id, updateDossier]);
+  }, [editBirthday, editCircle, editCompany, editEmails, editGoal, editImportance, editName, editNextAction, editNextActionDate, editPhones, editPhoto, editPowerGroupName, editRelations, editSectors, editPosition, editSuzerainId, editVassalIds, id, updateDossier]);
 
   // Автосохранение при изменении полей в режиме редактирования
   useEffect(() => {
@@ -436,8 +449,38 @@ export default function DossierScreen() {
     );
   };
 
+  const pickImageWeb = useCallback(() => {
+    return new Promise<string | null>((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = (e: Event) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) { resolve(null); return; }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    });
+  }, []);
+
   const pickImage = async () => {
     try {
+      if (Platform.OS === 'web') {
+        const dataUrl = await pickImageWeb();
+        if (!dataUrl) return;
+        setEditPhoto(dataUrl);
+        console.log('[Dossier] Photo picked via web file input');
+        if (dossier && id) {
+          updateDossier(id, {
+            contact: { ...dossier.contact, photo: dataUrl },
+          });
+        }
+        return;
+      }
+
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (permissionResult.granted === false) {
@@ -516,21 +559,23 @@ export default function DossierScreen() {
     setTimeout(() => {
       if (suzerainDossier) {
         const updatedVassals = suzerainDossier.powerGrouping?.vassalIds || [];
-        if (!updatedVassals.includes(id!)) {
+        const needsVassalUpdate = !updatedVassals.includes(id!);
+        const hasReciprocalRelation = suzerainDossier.relations.find(r => r.contactId === id);
+
+        if (needsVassalUpdate || !hasReciprocalRelation) {
+          const updatedRelations = hasReciprocalRelation
+            ? suzerainDossier.relations
+            : [...suzerainDossier.relations, { contactId: id!, strength: 5 }];
+
           updateDossier(suzerainId, {
             powerGrouping: {
               groupName: suzerainDossier.powerGrouping?.groupName || editPowerGroupName,
               suzerainId: suzerainDossier.powerGrouping?.suzerainId,
-              vassalIds: [...updatedVassals, id!],
+              vassalIds: needsVassalUpdate ? [...updatedVassals, id!] : updatedVassals,
             },
+            relations: updatedRelations,
           });
-        }
-
-        const hasReciprocalRelation = suzerainDossier.relations.find(r => r.contactId === id);
-        if (!hasReciprocalRelation) {
-          updateDossier(suzerainId, {
-            relations: [...suzerainDossier.relations, { contactId: id!, strength: 5 }],
-          });
+          console.log('[Dossier] handleSetSuzerain: updated suzerain', suzerainId, 'added vassal:', id);
         }
       }
     }, 100);
@@ -566,20 +611,20 @@ export default function DossierScreen() {
     setTimeout(() => {
       const vassalDossier = dossiers.find(d => d.contact.id === vassalId);
       if (vassalDossier) {
+        const hasReciprocalRelation = vassalDossier.relations.find(r => r.contactId === id);
+        const updatedRelations = hasReciprocalRelation
+          ? vassalDossier.relations
+          : [...vassalDossier.relations, { contactId: id!, strength: 5 }];
+
         updateDossier(vassalId, {
           powerGrouping: {
             groupName: editPowerGroupName,
             suzerainId: id,
             vassalIds: vassalDossier.powerGrouping?.vassalIds || [],
           },
+          relations: updatedRelations,
         });
-
-        const hasReciprocalRelation = vassalDossier.relations.find(r => r.contactId === id);
-        if (!hasReciprocalRelation) {
-          updateDossier(vassalId, {
-            relations: [...vassalDossier.relations, { contactId: id!, strength: 5 }],
-          });
-        }
+        console.log('[Dossier] handleAddVassal: assigned vassal', vassalId, 'group:', editPowerGroupName, 'suzerain:', id);
       }
     }, 100);
   };
@@ -632,6 +677,7 @@ export default function DossierScreen() {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView
+            ref={scrollViewRef}
             style={styles.content}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -724,6 +770,24 @@ export default function DossierScreen() {
                   placeholderTextColor={theme.primaryDim}
                   placeholder={t.contact.optional}
                 />
+                <Text style={styles.editLabel}>{(t.contact as any).birthday ?? 'BIRTHDAY'}</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editBirthday}
+                  onChangeText={(text) => {
+                    const cleaned = text.replace(/[^0-9.]/g, '');
+                    let formatted = cleaned;
+                    const prev = editBirthday;
+                    if (cleaned.length === 2 && prev.length < 2) formatted = cleaned + '.';
+                    else if (cleaned.length === 5 && prev.length < 5 && cleaned[2] === '.') formatted = cleaned + '.';
+                    if (formatted.length > 10) formatted = formatted.slice(0, 10);
+                    setEditBirthday(formatted);
+                  }}
+                  placeholderTextColor={theme.primaryDim}
+                  placeholder={(t.contact as any).birthdayPlaceholder ?? 'DD.MM.YYYY'}
+                  keyboardType="numeric"
+                  maxLength={10}
+                />
                 <Text style={styles.editLabel}>{t.contact.nextAction ?? 'NEXT ACTION'}</Text>
                 <TextInput
                   style={styles.editInput}
@@ -769,6 +833,11 @@ export default function DossierScreen() {
                 ) : null}
                 {dossier.contact.company ? (
                   <Text style={styles.company}>{dossier.contact.company}</Text>
+                ) : null}
+                {dossier.contact.birthday ? (
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaText}>{(t.contact as any).birthday ?? 'BIRTHDAY'}: {dossier.contact.birthday}</Text>
+                  </View>
                 ) : null}
                 {dossier.nextAction ? (
                   <View style={styles.nextActionContainer}>
@@ -926,8 +995,23 @@ export default function DossierScreen() {
                         <View style={styles.goalCardContent}>
                           <View style={styles.goalCardTop}>
                             <Text style={styles.goalCardTitle} numberOfLines={1}>{g.title}</Text>
-                            {g.progress > 0 ? (
-                              <Text style={styles.goalCardProgress}>{g.progress}%</Text>
+                            {g.priority > 0 ? (
+                              <View style={styles.goalCardDotsRow}>
+                                {Array.from({ length: 10 }, (_, i) => {
+                                  const color = g.priority >= 8 ? theme.danger : g.priority >= 5 ? (theme.warning ?? '#f59e0b') : (theme.success ?? '#10b981');
+                                  return (
+                                    <View
+                                      key={i}
+                                      style={[
+                                        styles.goalCardDot,
+                                        i < g.priority
+                                          ? { backgroundColor: color }
+                                          : { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.border },
+                                      ]}
+                                    />
+                                  );
+                                })}
+                              </View>
                             ) : null}
                           </View>
                           {g.description ? (
@@ -1409,7 +1493,18 @@ export default function DossierScreen() {
             )}
           </View>
 
-          <View style={styles.section}>
+          <View
+            style={styles.section}
+            onLayout={(e) => {
+              maintenanceSectionY.current = e.nativeEvent.layout.y;
+              if ((section === 'maintenance' || section === 'diary') && !hasScrolledToMaintenance.current) {
+                hasScrolledToMaintenance.current = true;
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: true });
+                }, 300);
+              }
+            }}
+          >
             <View style={styles.maintenanceHeaderRow}>
               <View style={styles.sectionHeader}>
                 <BookOpen size={20} color={theme.primary} />
@@ -1658,6 +1753,15 @@ export default function DossierScreen() {
               </View>
             )}
           </View>
+
+          <OsintBlock
+            contactId={id!}
+            contact={dossier.contact}
+            relations={dossier.relations}
+            powerGrouping={dossier.powerGrouping}
+            allContactNames={allContactNamesMap}
+          />
+
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -2350,6 +2454,17 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontFamily: 'monospace' as const,
     fontWeight: '700' as const,
     marginLeft: 8,
+  },
+  goalCardDotsRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 2,
+    marginLeft: 8,
+  },
+  goalCardDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   goalCardDescription: {
     fontSize: 11,

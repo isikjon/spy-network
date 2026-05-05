@@ -44,6 +44,10 @@ import {
   UserCircle2,
   ThumbsUp,
   ThumbsDown,
+  Search,
+  Eye,
+  Pencil,
+  Users,
 } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -56,19 +60,46 @@ import type {
   ForumNotification,
   ForumNotificationSettings,
   ForumProfile,
+  AccessLevel,
+  BanType,
 } from '@/types';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-type ClubView = 'categories' | 'topics' | 'messages' | 'notifications' | 'notifSettings';
+type ClubView = 'categories' | 'topics' | 'messages' | 'notifications' | 'notifSettings' | 'modPanel' | 'search';
 type OnboardingStep = 'none' | 'welcome' | 'rules' | 'profile';
 
 export default function ClubScreen() {
-  const { theme, t, phoneNumber, subscriptionLevel, dossiers, addDossier } = useApp();
+  const { theme, t, phoneNumber, userUid, subscriptionLevel, dossiers, addDossier } = useApp();
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const userLevel = ForumService.getUserAccessLevel(subscriptionLevel);
+  const baseLevel = ForumService.getUserAccessLevel(subscriptionLevel);
+
+  const moderatorQuery = useQuery({
+    queryKey: ['forum_is_moderator', userUid],
+    queryFn: () => ForumService.isModerator(userUid ?? ''),
+    enabled: !!userUid,
+  });
+
+  const effectiveLevelQuery = useQuery({
+    queryKey: ['forum_effective_level', userUid, subscriptionLevel],
+    queryFn: () => ForumService.getEffectiveAccessLevel(userUid ?? '', subscriptionLevel),
+    enabled: !!userUid,
+  });
+
+  const bansQuery = useQuery({
+    queryKey: ['forum_bans'],
+    queryFn: ForumService.getBans,
+  });
+
+  const allProfilesQuery = useQuery({
+    queryKey: ['forum_all_profiles'],
+    queryFn: ForumService.getAllProfiles,
+  });
+
+  const isModeratorUser = moderatorQuery.data === true;
+  const userLevel = effectiveLevelQuery.data ?? baseLevel;
 
   const [view, setView] = useState<ClubView>('categories');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -95,6 +126,30 @@ export default function ClubScreen() {
   const [newTopicFirstMessage, setNewTopicFirstMessage] = useState('');
   const [messageText, setMessageText] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<ForumMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<ForumMessage | null>(null);
+  const [editMessageText, setEditMessageText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchText, setSearchText] = useState('');
+
+  const [showModSectionModal, setShowModSectionModal] = useState(false);
+  const [editingSection, setEditingSection] = useState<ForumCategory | null>(null);
+  const [sectionForm, setSectionForm] = useState({
+    name: '',
+    description: '',
+    readLevel: 1 as AccessLevel,
+    writeLevel: 1 as AccessLevel,
+    createTopicLevel: 1 as AccessLevel,
+    order: 0,
+  });
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [banTargetPhone, setBanTargetPhone] = useState('');
+  const [banType, setBanType] = useState<BanType>('write');
+  const [banPermanent, setBanPermanent] = useState(true);
+  const [banDays, setBanDays] = useState('7');
+  const [banReason, setBanReason] = useState('');
+  const [showAssignLevelModal, setShowAssignLevelModal] = useState(false);
+  const [assignTargetPhone, setAssignTargetPhone] = useState('');
+  const [assignLevel, setAssignLevel] = useState<AccessLevel>(3);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -112,18 +167,18 @@ export default function ClubScreen() {
   });
 
   const forumProfileQuery = useQuery({
-    queryKey: ['forum_profile', phoneNumber],
-    queryFn: () => ForumService.getForumProfile(phoneNumber ?? ''),
-    enabled: !!phoneNumber,
+    queryKey: ['forum_profile', userUid],
+    queryFn: () => ForumService.getForumProfile(userUid ?? ''),
+    enabled: !!userUid,
   });
 
   const myProfile = forumProfileQuery.data ?? null;
   const userName = useMemo(() => {
-    if (myProfile && phoneNumber) {
-      return ForumService.getForumNickname(myProfile, phoneNumber);
+    if (myProfile && userUid) {
+      return ForumService.getForumNickname(myProfile, userUid);
     }
     return phoneNumber ? phoneNumber.slice(-4) : 'Anon';
-  }, [myProfile, phoneNumber]);
+  }, [myProfile, userUid, phoneNumber]);
 
   useEffect(() => {
     if (welcomeSeenQuery.data === undefined || rulesAcceptedQuery.data === undefined) return;
@@ -160,21 +215,21 @@ export default function ClubScreen() {
 
   const handleRulesAcknowledge = useCallback(() => {
     markRulesAcceptedMutation.mutate();
-    if (onboardingStep === 'rules' && !forumProfileQuery.data && phoneNumber) {
+    if (onboardingStep === 'rules' && !forumProfileQuery.data && userUid) {
       setOnboardingStep('profile');
     } else {
       setOnboardingStep('none');
     }
     setShowRulesModal(false);
-  }, [markRulesAcceptedMutation, onboardingStep, forumProfileQuery.data, phoneNumber]);
+  }, [markRulesAcceptedMutation, onboardingStep, forumProfileQuery.data, userUid]);
 
   const saveProfileMutation = useMutation({
     mutationFn: async (profile: ForumProfile) => {
-      await ForumService.saveForumProfile(phoneNumber ?? '', profile);
+      await ForumService.saveForumProfile(userUid ?? '', profile);
       return profile;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['forum_profile', phoneNumber] });
+      void queryClient.invalidateQueries({ queryKey: ['forum_profile', userUid] });
       setOnboardingStep('none');
       setShowProfileModal(false);
       setIsEditingProfile(false);
@@ -187,6 +242,7 @@ export default function ClubScreen() {
       return;
     }
     const profile: ForumProfile = {
+      uid: userUid ?? '',
       fullName: profileForm.fullName.trim(),
       networkingGoals: profileForm.networkingGoals.trim(),
       competencies: profileForm.competencies.trim(),
@@ -198,7 +254,7 @@ export default function ClubScreen() {
       accessLevel: userLevel,
     };
     saveProfileMutation.mutate(profile);
-  }, [profileForm, phoneNumber, saveProfileMutation, club.profileRequired, myProfile, userLevel]);
+  }, [profileForm, phoneNumber, userUid, saveProfileMutation, club.profileRequired, myProfile, userLevel]);
 
   const pickProfilePhoto = useCallback(async () => {
     try {
@@ -300,6 +356,36 @@ export default function ClubScreen() {
     queryFn: ForumService.getCategories,
   });
 
+  const categoryStatsQuery = useQuery({
+    queryKey: ['forum_category_stats'],
+    queryFn: ForumService.getCategoryStats,
+  });
+
+  const onlineCountQuery = useQuery({
+    queryKey: ['forum_online_count'],
+    queryFn: ForumService.getOnlineCount,
+    refetchInterval: 60000,
+  });
+
+  const searchResultsQuery = useQuery({
+    queryKey: ['forum_search', searchQuery],
+    queryFn: () => ForumService.searchTopics(searchQuery),
+    enabled: searchQuery.length >= 2,
+  });
+
+  const heartbeatMutation = useMutation({
+    mutationFn: () => ForumService.heartbeat(userUid ?? ''),
+  });
+
+  useEffect(() => {
+    if (!userUid) return;
+    heartbeatMutation.mutate();
+    const interval = setInterval(() => {
+      heartbeatMutation.mutate();
+    }, 120000);
+    return () => clearInterval(interval);
+  }, [userUid]);
+
   const topicsQuery = useQuery({
     queryKey: ['forum_topics', selectedCategoryId],
     queryFn: () => ForumService.getTopicsByCategory(selectedCategoryId!),
@@ -314,7 +400,7 @@ export default function ClubScreen() {
 
   const notificationsQuery = useQuery({
     queryKey: ['forum_notifications'],
-    queryFn: () => ForumService.getNotifications(phoneNumber ?? ''),
+    queryFn: () => ForumService.getNotifications(userUid ?? ''),
   });
 
   const unreadCountQuery = useQuery({
@@ -324,7 +410,22 @@ export default function ClubScreen() {
 
   const notifSettingsQuery = useQuery({
     queryKey: ['forum_notif_settings'],
-    queryFn: () => ForumService.getNotificationSettings(phoneNumber ?? ''),
+    queryFn: () => ForumService.getNotificationSettings(userUid ?? ''),
+  });
+
+  const trackViewMutation = useMutation({
+    mutationFn: (topicId: string) => ForumService.trackTopicView(topicId, userUid ?? ''),
+  });
+
+  const editMessageMutation = useMutation({
+    mutationFn: async ({ msgId, content }: { msgId: string; content: string }) => {
+      return ForumService.editMessage(msgId, content, phoneNumber ?? '');
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['forum_messages', selectedTopicId] });
+      setEditingMessage(null);
+      setEditMessageText('');
+    },
   });
 
   const addTopicMutation = useMutation({
@@ -343,21 +444,12 @@ export default function ClubScreen() {
         lastMessageAt: now,
         createdAt: now,
       };
-      await ForumService.addTopic(topic);
-
-      const msg: ForumMessage = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        topicId,
-        authorPhone: phoneNumber ?? '',
-        authorName: userName,
-        content: firstMsg,
-        createdAt: now,
-      };
-      await ForumService.addMessage(msg);
+      await ForumService.addTopic(topic, firstMsg);
       return topic;
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['forum_topics', selectedCategoryId] });
+      void queryClient.invalidateQueries({ queryKey: ['forum_category_stats'] });
       setShowNewTopicModal(false);
       setNewTopicTitle('');
       setNewTopicFirstMessage('');
@@ -380,16 +472,18 @@ export default function ClubScreen() {
           replyToContent: replyTo.content.slice(0, 120),
         } : {}),
       };
-      await ForumService.addMessage(msg);
-      if (selectedTopic && selectedCategory) {
-        await ForumService.createNotificationForNewMessage(msg, selectedTopic, selectedCategory.id);
-      }
+      await ForumService.addMessage(
+        msg,
+        selectedCategory?.id,
+        selectedTopic?.title,
+      );
       return msg;
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['forum_messages', selectedTopicId] });
       void queryClient.invalidateQueries({ queryKey: ['forum_topics', selectedCategoryId] });
       void queryClient.invalidateQueries({ queryKey: ['forum_unread_count'] });
+      void queryClient.invalidateQueries({ queryKey: ['forum_category_stats'] });
       setMessageText('');
       setReplyToMessage(null);
     },
@@ -399,6 +493,7 @@ export default function ClubScreen() {
     mutationFn: (topicId: string) => ForumService.deleteTopicAndMessages(topicId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['forum_topics', selectedCategoryId] });
+      void queryClient.invalidateQueries({ queryKey: ['forum_category_stats'] });
       setView('topics');
       setSelectedTopicId(null);
       setSelectedTopic(null);
@@ -413,14 +508,14 @@ export default function ClubScreen() {
   });
 
   const likeMutation = useMutation({
-    mutationFn: (msgId: string) => ForumService.toggleMessageLike(msgId, phoneNumber ?? ''),
+    mutationFn: (msgId: string) => ForumService.toggleMessageLike(msgId, userUid ?? ''),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['forum_messages', selectedTopicId] });
     },
   });
 
   const dislikeMutation = useMutation({
-    mutationFn: (msgId: string) => ForumService.toggleMessageDislike(msgId, phoneNumber ?? ''),
+    mutationFn: (msgId: string) => ForumService.toggleMessageDislike(msgId, userUid ?? ''),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['forum_messages', selectedTopicId] });
     },
@@ -457,9 +552,102 @@ export default function ClubScreen() {
 
   const saveNotifSettingsMutation = useMutation({
     mutationFn: (settings: ForumNotificationSettings) =>
-      ForumService.saveNotificationSettings(phoneNumber ?? '', settings),
+      ForumService.saveNotificationSettings(userUid ?? '', settings),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['forum_notif_settings'] });
+    },
+  });
+
+  const saveSectionMutation = useMutation({
+    mutationFn: async (data: { isNew: boolean; id?: string }) => {
+      if (data.isNew) {
+        const cat: ForumCategory = {
+          id: `cat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          name: sectionForm.name.trim(),
+          description: sectionForm.description.trim(),
+          readLevel: sectionForm.readLevel,
+          createTopicLevel: sectionForm.createTopicLevel,
+          writeLevel: sectionForm.writeLevel,
+          order: sectionForm.order,
+          createdAt: new Date().toISOString(),
+        };
+        await ForumService.addCategory(cat);
+      } else if (data.id) {
+        await ForumService.updateCategory(data.id, {
+          name: sectionForm.name.trim(),
+          description: sectionForm.description.trim(),
+          readLevel: sectionForm.readLevel,
+          createTopicLevel: sectionForm.createTopicLevel,
+          writeLevel: sectionForm.writeLevel,
+          order: sectionForm.order,
+        });
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['forum_categories'] });
+      setShowModSectionModal(false);
+      setEditingSection(null);
+    },
+  });
+
+  const deleteSectionMutation = useMutation({
+    mutationFn: (id: string) => ForumService.deleteCategory(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['forum_categories'] });
+    },
+  });
+
+  const banMutation = useMutation({
+    mutationFn: async () => {
+      const days = banPermanent ? null : parseInt(banDays, 10) || 7;
+      await ForumService.banUser(banTargetPhone.trim(), banType, banReason.trim() || '-', userUid ?? '', days);
+      if (banType === 'app') {
+        console.log('[Club] App ban applied, subscription should be cancelled for:', banTargetPhone);
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['forum_bans'] });
+      setShowBanModal(false);
+      setBanTargetPhone('');
+      setBanReason('');
+      Alert.alert(club.banned);
+    },
+  });
+
+  const unbanMutation = useMutation({
+    mutationFn: ({ phone, type }: { phone: string; type: BanType }) =>
+      ForumService.unbanUser(phone, type),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['forum_bans'] });
+    },
+  });
+
+  const assignLevelMutation = useMutation({
+    mutationFn: async () => {
+      await ForumService.setAssignedAccessLevel(assignTargetPhone.trim(), assignLevel);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['forum_effective_level'] });
+      void queryClient.invalidateQueries({ queryKey: ['forum_all_profiles'] });
+      setShowAssignLevelModal(false);
+      setAssignTargetPhone('');
+      Alert.alert(club.levelAssigned);
+    },
+  });
+
+  const assignModeratorMutation = useMutation({
+    mutationFn: (phone: string) => ForumService.addModerator(phone, userUid ?? ''),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['forum_is_moderator'] });
+      Alert.alert(club.moderatorAssigned);
+    },
+  });
+
+  const removeModeratorMutation = useMutation({
+    mutationFn: (phone: string) => ForumService.removeModerator(phone),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['forum_is_moderator'] });
+      Alert.alert(club.moderatorRemoved);
     },
   });
 
@@ -474,7 +662,7 @@ export default function ClubScreen() {
   }, [fadeAnim]);
 
   const openCategory = useCallback((cat: ForumCategory) => {
-    if (userLevel < cat.readLevel) {
+    if (!isModeratorUser && userLevel < cat.readLevel) {
       Alert.alert(club.accessDenied, club.accessDeniedRead.replace('%d', String(cat.readLevel)));
       return;
     }
@@ -482,29 +670,42 @@ export default function ClubScreen() {
     setSelectedCategory(cat);
     setView('topics');
     animateTransition();
-  }, [userLevel, club, animateTransition]);
+  }, [userLevel, isModeratorUser, club, animateTransition]);
 
   const openTopic = useCallback((topic: ForumTopic) => {
     setSelectedTopicId(topic.id);
     setSelectedTopic(topic);
     setView('messages');
     animateTransition();
-  }, [animateTransition]);
+    if (userUid) {
+      trackViewMutation.mutate(topic.id);
+    }
+  }, [animateTransition, userUid]);
 
   const goBack = useCallback(() => {
     if (view === 'messages') {
       setView('topics');
       setSelectedTopicId(null);
       setSelectedTopic(null);
+      setEditingMessage(null);
+      setEditMessageText('');
     } else if (view === 'topics') {
       setView('categories');
       setSelectedCategoryId(null);
       setSelectedCategory(null);
-    } else if (view === 'notifications' || view === 'notifSettings') {
+    } else if (view === 'notifications' || view === 'notifSettings' || view === 'modPanel' || view === 'search') {
       setView('categories');
+      setSearchQuery('');
+      setSearchText('');
     }
     animateTransition();
   }, [view, animateTransition]);
+
+  const handleSearch = useCallback(() => {
+    if (searchText.trim().length >= 2) {
+      setSearchQuery(searchText.trim());
+    }
+  }, [searchText]);
 
   const getCategoryDisplayName = useCallback((name: string) => {
     const key = name as keyof typeof club;
@@ -543,10 +744,20 @@ export default function ClubScreen() {
         {view === 'messages' && (selectedTopic?.title ?? club.messages)}
         {view === 'notifications' && club.notifications}
         {view === 'notifSettings' && club.notificationSettings}
+        {view === 'modPanel' && club.modPanel}
+        {view === 'search' && club.searchResults}
       </Text>
       <View style={styles.headerRight}>
         {view === 'categories' && (
           <>
+            <TouchableOpacity
+              onPress={() => { setView('search'); animateTransition(); }}
+              style={styles.headerIconBtn}
+              activeOpacity={0.7}
+              testID="clubSearchBtn"
+            >
+              <Search size={20} color={theme.primary} />
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={handleOpenMyProfile}
               style={styles.headerIconBtn}
@@ -575,6 +786,16 @@ export default function ClubScreen() {
                 </View>
               )}
             </TouchableOpacity>
+            {isModeratorUser && (
+              <TouchableOpacity
+                onPress={() => { setView('modPanel'); animateTransition(); }}
+                style={styles.headerIconBtn}
+                activeOpacity={0.7}
+                testID="modPanelBtn"
+              >
+                <Shield size={20} color={theme.warning ?? '#F5A623'} />
+              </TouchableOpacity>
+            )}
           </>
         )}
         {view === 'notifications' && (
@@ -592,8 +813,12 @@ export default function ClubScreen() {
 
 
 
+  const categoryStats = categoryStatsQuery.data ?? {};
+  const onlineCount = onlineCountQuery.data ?? 0;
+
   const renderCategoryItem = ({ item }: { item: ForumCategory }) => {
-    const isLocked = userLevel < item.readLevel;
+    const isLocked = !isModeratorUser && userLevel < item.readLevel;
+    const stats = categoryStats[item.id];
     return (
       <TouchableOpacity
         style={[styles.categoryCard, isLocked && styles.categoryCardLocked]}
@@ -616,10 +841,18 @@ export default function ClubScreen() {
             <Text style={styles.categoryDesc} numberOfLines={1}>
               {getCategoryDisplayName(item.description)}
             </Text>
-            <View style={styles.categoryLevels}>
-              <Text style={styles.levelLabel}>{club.readLevel}{item.readLevel}</Text>
-              <Text style={styles.levelLabel}>{club.writeLevel}{item.writeLevel}</Text>
-              <Text style={styles.levelLabel}>{club.createLevel}{item.createTopicLevel}</Text>
+            <View style={styles.categoryStatsRow}>
+              {stats ? (
+                <>
+                  <Text style={styles.categoryStatText}>{stats.topicCount} {club.topicsCount}</Text>
+                  <Text style={styles.categoryStatDot}>{' \u2022 '}</Text>
+                  <Text style={styles.categoryStatText}>{stats.messageCount} {club.messagesCount}</Text>
+                  <Text style={styles.categoryStatDot}>{' \u2022 '}</Text>
+                  <Text style={styles.categoryStatText}>{formatDate(stats.lastActivity)}</Text>
+                </>
+              ) : (
+                <Text style={styles.categoryStatText}>0 {club.topicsCount}</Text>
+              )}
             </View>
           </View>
         </View>
@@ -681,9 +914,22 @@ export default function ClubScreen() {
     </TouchableOpacity>
   );
 
+  const allProfiles = allProfilesQuery.data ?? {};
+
+  const getAuthorAccessLevel = useCallback((authorPhone: string, isOwn: boolean): AccessLevel => {
+    if (isOwn) return userLevel;
+    for (const profile of Object.values(allProfiles)) {
+      if (profile.phone === authorPhone || profile.uid === authorPhone) {
+        return profile.accessLevel ?? 1;
+      }
+    }
+    return 1;
+  }, [allProfiles, userLevel]);
+
   const renderMessageItem = ({ item }: { item: ForumMessage }) => {
     const isOwn = item.authorPhone === phoneNumber;
-    const authorAccessLevel = isOwn ? userLevel : 1;
+    const authorAccessLevel = getAuthorAccessLevel(item.authorPhone, isOwn);
+    const isEditing = editingMessage?.id === item.id;
     return (
       <View style={[styles.messageCard, isOwn && styles.messageCardOwn]} testID={`forumMsg_${item.id}`}>
         {item.replyToId && item.replyToAuthor ? (
@@ -709,10 +955,47 @@ export default function ClubScreen() {
               <Shield size={9} color={theme.primary} />
               <Text style={styles.accessLevelBadgeText}>{club.accessLevelShort}{authorAccessLevel}</Text>
             </View>
+            {item.editedAt && (
+              <Text style={styles.editedLabel}>{club.edited}</Text>
+            )}
           </View>
           <Text style={styles.messageTime}>{formatDate(item.createdAt)}</Text>
         </View>
-        <Text style={styles.messageContent}>{item.content}</Text>
+        {isEditing ? (
+          <View style={styles.editMessageContainer}>
+            <TextInput
+              style={styles.editMessageInput}
+              value={editMessageText}
+              onChangeText={setEditMessageText}
+              multiline
+              maxLength={2000}
+              autoFocus
+            />
+            <View style={styles.editMessageActions}>
+              <TouchableOpacity
+                style={styles.editCancelBtn}
+                onPress={() => { setEditingMessage(null); setEditMessageText(''); }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.editCancelBtnText}>{club.cancelEdit}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editSaveBtn, !editMessageText.trim() && styles.createBtnDisabled]}
+                onPress={() => {
+                  if (editMessageText.trim()) {
+                    editMessageMutation.mutate({ msgId: item.id, content: editMessageText.trim() });
+                  }
+                }}
+                disabled={!editMessageText.trim() || editMessageMutation.isPending}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.editSaveBtnText}>{club.saveEdit}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.messageContent}>{item.content}</Text>
+        )}
         <View style={styles.messageActions}>
           <View style={styles.messageReactionsRow}>
             <TouchableOpacity
@@ -776,7 +1059,20 @@ export default function ClubScreen() {
                 <Text style={styles.messageReplyText}>{club.reply}</Text>
               </TouchableOpacity>
             )}
-            {isOwn && (
+            {isOwn && !isEditing && !selectedTopic?.isLocked && (
+              <TouchableOpacity
+                style={styles.messageReplyBtn}
+                onPress={() => {
+                  setEditingMessage(item);
+                  setEditMessageText(item.content);
+                }}
+                activeOpacity={0.7}
+                testID={`editBtn_${item.id}`}
+              >
+                <Pencil size={13} color={theme.primaryDim} />
+              </TouchableOpacity>
+            )}
+            {(isOwn || isModeratorUser) && (
               <TouchableOpacity
                 style={styles.messageDeleteBtn}
                 onPress={() => {
@@ -788,6 +1084,18 @@ export default function ClubScreen() {
                 activeOpacity={0.7}
               >
                 <Trash2 size={13} color={theme.danger} />
+              </TouchableOpacity>
+            )}
+            {isModeratorUser && !isOwn && item.authorPhone !== 'system' && (
+              <TouchableOpacity
+                style={styles.messageDeleteBtn}
+                onPress={() => {
+                  setBanTargetPhone(item.authorPhone);
+                  setShowBanModal(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Shield size={13} color={theme.warning ?? '#F5A623'} />
               </TouchableOpacity>
             )}
           </View>
@@ -830,14 +1138,24 @@ export default function ClubScreen() {
     </TouchableOpacity>
   );
 
-  const canCreateTopic = selectedCategory ? userLevel >= selectedCategory.createTopicLevel : false;
-  const canWrite = selectedCategory ? userLevel >= selectedCategory.writeLevel : false;
+  const canCreateTopic = selectedCategory ? (isModeratorUser || userLevel >= selectedCategory.createTopicLevel) : false;
+  const canWrite = selectedCategory ? (isModeratorUser || userLevel >= selectedCategory.writeLevel) : false;
 
   const renderCategories = () => (
     <View style={styles.content}>
-      <View style={styles.levelIndicator}>
-        <Shield size={14} color={theme.primary} />
-        <Text style={styles.levelIndicatorText}>{club.yourLevel}: {userLevel}</Text>
+      <View style={styles.levelIndicatorRow}>
+        <View style={styles.levelIndicator}>
+          <Shield size={14} color={theme.primary} />
+          <Text style={styles.levelIndicatorText}>
+            {club.yourLevel}: {userLevel}{isModeratorUser ? ` | ${club.moderator}` : ''}
+          </Text>
+        </View>
+        {onlineCount > 0 && (
+          <View style={styles.onlineIndicator}>
+            <View style={styles.onlineDot} />
+            <Text style={styles.onlineText}>{onlineCount} {club.online}</Text>
+          </View>
+        )}
       </View>
       <FlatList
         data={categoriesQuery.data ?? []}
@@ -845,6 +1163,76 @@ export default function ClubScreen() {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+      />
+    </View>
+  );
+
+  const renderSearch = () => (
+    <View style={styles.content}>
+      <View style={styles.searchBarContainer}>
+        <View style={styles.searchInputRow}>
+          <Search size={16} color={theme.primaryDim} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={club.searchPlaceholder}
+            placeholderTextColor={theme.primaryDim}
+            value={searchText}
+            onChangeText={setSearchText}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+            maxLength={100}
+            autoFocus
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => { setSearchText(''); setSearchQuery(''); }} activeOpacity={0.7}>
+              <X size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[styles.searchBtn, searchText.trim().length < 2 && styles.createBtnDisabled]}
+          onPress={handleSearch}
+          disabled={searchText.trim().length < 2}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.searchBtnText}>{club.search}</Text>
+        </TouchableOpacity>
+      </View>
+      <FlatList
+        data={searchResultsQuery.data ?? []}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.topicCard}
+            onPress={() => {
+              const cat = categoriesQuery.data?.find(c => c.id === item.categoryId);
+              if (cat) {
+                setSelectedCategoryId(cat.id);
+                setSelectedCategory(cat);
+              }
+              openTopic(item);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.topicTitle} numberOfLines={2}>{item.title}</Text>
+            <View style={styles.topicFooter}>
+              <Text style={styles.topicMeta}>{item.authorName}</Text>
+              <Text style={styles.topicMeta}>{item.messageCount} {club.replies}</Text>
+              <Text style={styles.topicMeta}>{formatDate(item.lastMessageAt)}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          searchQuery.length >= 2 ? (
+            <View style={styles.emptyState}>
+              <Search size={48} color={theme.primaryDim} strokeWidth={1} />
+              <Text style={styles.emptyTitle}>{club.noSearchResults}</Text>
+              <Text style={styles.emptyText}>{club.noSearchResultsDesc}</Text>
+            </View>
+          ) : null
+        }
       />
     </View>
   );
@@ -1057,6 +1445,141 @@ export default function ClubScreen() {
     );
   };
 
+  const renderModPanel = () => {
+    const bans = bansQuery.data ?? [];
+    const profiles = allProfilesQuery.data ?? {};
+    const categories = categoriesQuery.data ?? [];
+
+    return (
+      <ScrollView style={styles.content} contentContainerStyle={styles.settingsContent}>
+        <View style={styles.modSectionBlock}>
+          <Text style={styles.modSectionTitle}>{club.manageSections}</Text>
+          {categories.map(cat => (
+            <View key={cat.id} style={styles.modSectionRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modSectionName}>{getCategoryDisplayName(cat.name)}</Text>
+                <Text style={styles.modSectionMeta}>
+                  R:{cat.readLevel} W:{cat.writeLevel} T:{cat.createTopicLevel}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modSmallBtn}
+                onPress={() => {
+                  setEditingSection(cat);
+                  setSectionForm({
+                    name: cat.name,
+                    description: cat.description,
+                    readLevel: cat.readLevel,
+                    writeLevel: cat.writeLevel,
+                    createTopicLevel: cat.createTopicLevel,
+                    order: cat.order,
+                  });
+                  setShowModSectionModal(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Edit3 size={14} color={theme.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modSmallBtn}
+                onPress={() => {
+                  Alert.alert(club.deleteSection, club.deleteSectionConfirm, [
+                    { text: club.cancel, style: 'cancel' },
+                    { text: club.delete, style: 'destructive', onPress: () => deleteSectionMutation.mutate(cat.id) },
+                  ]);
+                }}
+                activeOpacity={0.7}
+              >
+                <Trash2 size={14} color={theme.danger} />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity
+            style={styles.modAddBtn}
+            onPress={() => {
+              setEditingSection(null);
+              setSectionForm({ name: '', description: '', readLevel: 1, writeLevel: 1, createTopicLevel: 1, order: categories.length });
+              setShowModSectionModal(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Plus size={16} color={theme.primary} />
+            <Text style={styles.modAddBtnText}>{club.addSection}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.modSectionBlock}>
+          <Text style={styles.modSectionTitle}>{club.banManagement}</Text>
+          <TouchableOpacity
+            style={styles.modAddBtn}
+            onPress={() => {
+              setBanTargetPhone('');
+              setBanType('write');
+              setBanPermanent(true);
+              setBanDays('7');
+              setBanReason('');
+              setShowBanModal(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Shield size={16} color={theme.danger} />
+            <Text style={[styles.modAddBtnText, { color: theme.danger }]}>{club.banUser}</Text>
+          </TouchableOpacity>
+          {bans.length === 0 ? (
+            <Text style={styles.modEmptyText}>{club.noBans}</Text>
+          ) : (
+            <>
+              <Text style={styles.modSubTitle}>{club.activeBans} ({bans.length})</Text>
+              {bans.map((ban, idx) => {
+                const profile = profiles[ban.phone];
+                const displayName = profile ? profile.fullName : ban.phone;
+                return (
+                  <View key={`${ban.phone}_${ban.type}_${idx}`} style={styles.modBanRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modBanName}>{displayName}</Text>
+                      <Text style={styles.modBanMeta}>
+                        {ban.type === 'write' ? club.banTypeWrite : ban.type === 'forum' ? club.banTypeForum : club.banTypeApp}
+                        {' • '}
+                        {ban.permanent ? club.bannedPermanent : `${club.bannedUntil} ${new Date(ban.expiresAt ?? '').toLocaleDateString()}`}
+                      </Text>
+                      {ban.reason && ban.reason !== '-' && (
+                        <Text style={styles.modBanReason}>{ban.reason}</Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={styles.modSmallBtn}
+                      onPress={() => unbanMutation.mutate({ phone: ban.phone, type: ban.type })}
+                      activeOpacity={0.7}
+                    >
+                      <X size={14} color={theme.primary} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </>
+          )}
+        </View>
+
+        <View style={styles.modSectionBlock}>
+          <Text style={styles.modSectionTitle}>{club.assignLevel}</Text>
+          <Text style={styles.modDescText}>{club.assignLevelDesc}</Text>
+          <TouchableOpacity
+            style={styles.modAddBtn}
+            onPress={() => {
+              setAssignTargetPhone('');
+              setAssignLevel(3);
+              setShowAssignLevelModal(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Shield size={16} color={theme.primary} />
+            <Text style={styles.modAddBtnText}>{club.assignLevel}</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    );
+  };
+
   return (
     <View style={styles.background} testID="clubTabRoot">
       <StatusBar barStyle="light-content" />
@@ -1068,6 +1591,8 @@ export default function ClubScreen() {
           {view === 'messages' && renderMessages()}
           {view === 'notifications' && renderNotifications()}
           {view === 'notifSettings' && renderNotifSettings()}
+          {view === 'modPanel' && renderModPanel()}
+          {view === 'search' && renderSearch()}
         </Animated.View>
       </SafeAreaView>
 
@@ -1529,6 +2054,275 @@ export default function ClubScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={showModSectionModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => { setShowModSectionModal(false); setEditingSection(null); }}
+      >
+        <View style={styles.onboardingOverlay}>
+          <View style={styles.onboardingCard}>
+            <View style={styles.profileCardHeader}>
+              <Text style={styles.onboardingTitle}>{editingSection ? club.editSection : club.addSection}</Text>
+              <TouchableOpacity
+                onPress={() => { setShowModSectionModal(false); setEditingSection(null); }}
+                activeOpacity={0.7}
+              >
+                <X size={22} color={theme.primary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.profileScrollContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.fieldLabel}>{club.sectionName}</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={sectionForm.name}
+                onChangeText={(v) => setSectionForm(prev => ({ ...prev, name: v }))}
+                placeholder="section_key"
+                placeholderTextColor={theme.primaryDim}
+                maxLength={100}
+              />
+              <Text style={styles.fieldLabel}>{club.sectionDesc}</Text>
+              <TextInput
+                style={[styles.fieldInput, styles.fieldInputMulti]}
+                value={sectionForm.description}
+                onChangeText={(v) => setSectionForm(prev => ({ ...prev, description: v }))}
+                placeholder="section_desc_key"
+                placeholderTextColor={theme.primaryDim}
+                multiline
+                maxLength={300}
+              />
+              <Text style={styles.fieldLabel}>{club.sectionReadLevel}</Text>
+              <View style={styles.modLevelRow}>
+                {([1, 2, 3, 4, 5] as AccessLevel[]).map(l => (
+                  <TouchableOpacity
+                    key={l}
+                    style={[styles.modLevelPill, sectionForm.readLevel === l && styles.modLevelPillActive]}
+                    onPress={() => setSectionForm(prev => ({ ...prev, readLevel: l }))}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.modLevelPillText, sectionForm.readLevel === l && styles.modLevelPillTextActive]}>{l}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.fieldLabel}>{club.sectionWriteLevel}</Text>
+              <View style={styles.modLevelRow}>
+                {([1, 2, 3, 4, 5] as AccessLevel[]).map(l => (
+                  <TouchableOpacity
+                    key={l}
+                    style={[styles.modLevelPill, sectionForm.writeLevel === l && styles.modLevelPillActive]}
+                    onPress={() => setSectionForm(prev => ({ ...prev, writeLevel: l }))}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.modLevelPillText, sectionForm.writeLevel === l && styles.modLevelPillTextActive]}>{l}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.fieldLabel}>{club.sectionCreateLevel}</Text>
+              <View style={styles.modLevelRow}>
+                {([1, 2, 3, 4, 5] as AccessLevel[]).map(l => (
+                  <TouchableOpacity
+                    key={l}
+                    style={[styles.modLevelPill, sectionForm.createTopicLevel === l && styles.modLevelPillActive]}
+                    onPress={() => setSectionForm(prev => ({ ...prev, createTopicLevel: l }))}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.modLevelPillText, sectionForm.createTopicLevel === l && styles.modLevelPillTextActive]}>{l}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.fieldLabel}>{club.sectionOrder}</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={String(sectionForm.order)}
+                onChangeText={(v) => setSectionForm(prev => ({ ...prev, order: parseInt(v, 10) || 0 }))}
+                keyboardType="numeric"
+                maxLength={3}
+              />
+              <TouchableOpacity
+                style={[styles.createBtn, !sectionForm.name.trim() && styles.createBtnDisabled]}
+                onPress={() => saveSectionMutation.mutate({ isNew: !editingSection, id: editingSection?.id })}
+                disabled={!sectionForm.name.trim() || saveSectionMutation.isPending}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.createBtnText}>{club.saveSectionChanges}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showBanModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowBanModal(false)}
+      >
+        <View style={styles.onboardingOverlay}>
+          <View style={styles.onboardingCard}>
+            <View style={styles.profileCardHeader}>
+              <Text style={styles.onboardingTitle}>{club.banUser}</Text>
+              <TouchableOpacity
+                onPress={() => setShowBanModal(false)}
+                activeOpacity={0.7}
+              >
+                <X size={22} color={theme.primary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.profileScrollContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.fieldLabel}>{club.userPhone}</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={banTargetPhone}
+                onChangeText={setBanTargetPhone}
+                placeholder="+7..."
+                placeholderTextColor={theme.primaryDim}
+                maxLength={20}
+              />
+              <Text style={styles.fieldLabel}>{club.banDuration}</Text>
+              <View style={styles.modBanTypeRow}>
+                {(['write', 'forum', 'app'] as BanType[]).map(bt => (
+                  <TouchableOpacity
+                    key={bt}
+                    style={[styles.modBanTypePill, banType === bt && styles.modBanTypePillActive]}
+                    onPress={() => setBanType(bt)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.modBanTypePillText, banType === bt && styles.modBanTypePillTextActive]}>
+                      {bt === 'write' ? club.banTypeWrite : bt === 'forum' ? club.banTypeForum : club.banTypeApp}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.fieldLabel}>{club.banDuration}</Text>
+              <View style={styles.modBanTypeRow}>
+                <TouchableOpacity
+                  style={[styles.modBanTypePill, banPermanent && styles.modBanTypePillActive]}
+                  onPress={() => setBanPermanent(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.modBanTypePillText, banPermanent && styles.modBanTypePillTextActive]}>{club.banPermanent}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modBanTypePill, !banPermanent && styles.modBanTypePillActive]}
+                  onPress={() => setBanPermanent(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.modBanTypePillText, !banPermanent && styles.modBanTypePillTextActive]}>{club.banDays}</Text>
+                </TouchableOpacity>
+              </View>
+              {!banPermanent && (
+                <TextInput
+                  style={[styles.fieldInput, { marginTop: 8 }]}
+                  value={banDays}
+                  onChangeText={setBanDays}
+                  placeholder="7"
+                  placeholderTextColor={theme.primaryDim}
+                  keyboardType="numeric"
+                  maxLength={5}
+                />
+              )}
+              <Text style={styles.fieldLabel}>{club.banReason}</Text>
+              <TextInput
+                style={[styles.fieldInput, styles.fieldInputMulti]}
+                value={banReason}
+                onChangeText={setBanReason}
+                placeholder={club.banReasonPlaceholder}
+                placeholderTextColor={theme.primaryDim}
+                multiline
+                maxLength={500}
+              />
+              <TouchableOpacity
+                style={[styles.createBtn, { borderColor: theme.danger }, !banTargetPhone.trim() && styles.createBtnDisabled]}
+                onPress={() => banMutation.mutate()}
+                disabled={!banTargetPhone.trim() || banMutation.isPending}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.createBtnText, { color: theme.danger }]}>{club.banConfirm}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showAssignLevelModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAssignLevelModal(false)}
+      >
+        <View style={styles.onboardingOverlay}>
+          <View style={styles.onboardingCard}>
+            <View style={styles.profileCardHeader}>
+              <Text style={styles.onboardingTitle}>{club.assignLevel}</Text>
+              <TouchableOpacity
+                onPress={() => setShowAssignLevelModal(false)}
+                activeOpacity={0.7}
+              >
+                <X size={22} color={theme.primary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.profileScrollContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.fieldLabel}>{club.userPhone}</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={assignTargetPhone}
+                onChangeText={setAssignTargetPhone}
+                placeholder="+7..."
+                placeholderTextColor={theme.primaryDim}
+                maxLength={20}
+              />
+              <Text style={styles.fieldLabel}>{club.assignLevel}</Text>
+              <View style={styles.modLevelRow}>
+                {([3, 4, 5] as AccessLevel[]).map(l => (
+                  <TouchableOpacity
+                    key={l}
+                    style={[styles.modLevelPill, assignLevel === l && styles.modLevelPillActive]}
+                    onPress={() => setAssignLevel(l)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.modLevelPillText, assignLevel === l && styles.modLevelPillTextActive]}>{club.accessLevelShort}{l}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity
+                style={[styles.createBtn, !assignTargetPhone.trim() && styles.createBtnDisabled]}
+                onPress={() => assignLevelMutation.mutate()}
+                disabled={!assignTargetPhone.trim() || assignLevelMutation.isPending}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.createBtnText}>{club.assignLevel}</Text>
+              </TouchableOpacity>
+              <View style={styles.onboardingDivider} />
+              <Text style={styles.fieldLabel}>{club.assignModerator}</Text>
+              <TouchableOpacity
+                style={[styles.createBtn, !assignTargetPhone.trim() && styles.createBtnDisabled]}
+                onPress={() => {
+                  if (assignTargetPhone.trim()) {
+                    assignModeratorMutation.mutate(assignTargetPhone.trim());
+                  }
+                }}
+                disabled={!assignTargetPhone.trim() || assignModeratorMutation.isPending}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.createBtnText}>{club.assignModerator}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createBtn, { borderColor: theme.danger, marginTop: 8 }, !assignTargetPhone.trim() && styles.createBtnDisabled]}
+                onPress={() => {
+                  if (assignTargetPhone.trim()) {
+                    removeModeratorMutation.mutate(assignTargetPhone.trim());
+                  }
+                }}
+                disabled={!assignTargetPhone.trim() || removeModeratorMutation.isPending}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.createBtnText, { color: theme.danger }]}>{club.removeModerator}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1602,13 +2396,18 @@ const createStyles = (theme: any) =>
       padding: 16,
       paddingBottom: 8,
     },
+    levelIndicatorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 4,
+    },
     levelIndicator: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 4,
     },
     levelIndicatorText: {
       fontSize: 11,
@@ -1616,6 +2415,29 @@ const createStyles = (theme: any) =>
       color: theme.primary,
       fontFamily: 'monospace' as const,
       letterSpacing: 1.5,
+    },
+    onlineIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderWidth: 1,
+      borderColor: theme.success + '50',
+      backgroundColor: theme.success + '10',
+    },
+    onlineDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: theme.success,
+    },
+    onlineText: {
+      fontSize: 9,
+      fontWeight: '800' as const,
+      color: theme.success,
+      fontFamily: 'monospace' as const,
+      letterSpacing: 0.5,
     },
     categoryCard: {
       flexDirection: 'row',
@@ -1662,6 +2484,22 @@ const createStyles = (theme: any) =>
       color: theme.textSecondary,
       fontFamily: 'monospace' as const,
       marginBottom: 6,
+    },
+    categoryStatsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+    },
+    categoryStatText: {
+      fontSize: 9,
+      fontWeight: '600' as const,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
+    },
+    categoryStatDot: {
+      fontSize: 9,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
     },
     categoryLevels: {
       flexDirection: 'row',
@@ -1810,6 +2648,97 @@ const createStyles = (theme: any) =>
       color: theme.text,
       fontFamily: 'monospace' as const,
       lineHeight: 20,
+    },
+    editedLabel: {
+      fontSize: 9,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
+      fontStyle: 'italic' as const,
+    },
+    editMessageContainer: {
+      marginBottom: 4,
+    },
+    editMessageInput: {
+      borderWidth: 1,
+      borderColor: theme.primary,
+      backgroundColor: theme.overlay,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      fontSize: 13,
+      color: theme.text,
+      fontFamily: 'monospace' as const,
+      maxHeight: 120,
+      minHeight: 60,
+      textAlignVertical: 'top',
+    },
+    editMessageActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 8,
+      marginTop: 6,
+    },
+    editCancelBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    editCancelBtnText: {
+      fontSize: 10,
+      fontWeight: '700' as const,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
+      letterSpacing: 1,
+    },
+    editSaveBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '15',
+    },
+    editSaveBtnText: {
+      fontSize: 10,
+      fontWeight: '700' as const,
+      color: theme.primary,
+      fontFamily: 'monospace' as const,
+      letterSpacing: 1,
+    },
+    searchBarContainer: {
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 8,
+      gap: 8,
+    },
+    searchInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 2,
+      borderColor: theme.border,
+      backgroundColor: theme.overlay,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 13,
+      color: theme.text,
+      fontFamily: 'monospace' as const,
+      padding: 0,
+    },
+    searchBtn: {
+      borderWidth: 2,
+      borderColor: theme.primary,
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    searchBtnText: {
+      fontSize: 12,
+      fontWeight: '700' as const,
+      color: theme.primary,
+      fontFamily: 'monospace' as const,
+      letterSpacing: 1.5,
     },
     messageActions: {
       flexDirection: 'row',
@@ -2473,5 +3402,166 @@ const createStyles = (theme: any) =>
       color: theme.primary,
       fontFamily: 'monospace' as const,
       letterSpacing: 1.5,
+    },
+    modSectionBlock: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.overlay,
+      padding: 14,
+      marginBottom: 12,
+    },
+    modSectionTitle: {
+      fontSize: 12,
+      fontWeight: '800' as const,
+      color: theme.primary,
+      fontFamily: 'monospace' as const,
+      letterSpacing: 2,
+      marginBottom: 12,
+    },
+    modSubTitle: {
+      fontSize: 10,
+      fontWeight: '700' as const,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
+      letterSpacing: 1,
+      marginBottom: 8,
+      marginTop: 4,
+    },
+    modDescText: {
+      fontSize: 11,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
+      lineHeight: 16,
+      marginBottom: 10,
+    },
+    modSectionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    modSectionName: {
+      fontSize: 12,
+      fontWeight: '700' as const,
+      color: theme.text,
+      fontFamily: 'monospace' as const,
+    },
+    modSectionMeta: {
+      fontSize: 9,
+      color: theme.primaryDim,
+      fontFamily: 'monospace' as const,
+      marginTop: 2,
+    },
+    modSmallBtn: {
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    modAddBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: theme.primary,
+      borderStyle: 'dashed',
+      marginTop: 8,
+    },
+    modAddBtnText: {
+      fontSize: 11,
+      fontWeight: '700' as const,
+      color: theme.primary,
+      fontFamily: 'monospace' as const,
+      letterSpacing: 1,
+    },
+    modEmptyText: {
+      fontSize: 11,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
+      textAlign: 'center' as const,
+      paddingVertical: 12,
+    },
+    modBanRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    modBanName: {
+      fontSize: 12,
+      fontWeight: '700' as const,
+      color: theme.text,
+      fontFamily: 'monospace' as const,
+    },
+    modBanMeta: {
+      fontSize: 9,
+      color: theme.danger,
+      fontFamily: 'monospace' as const,
+      marginTop: 2,
+    },
+    modBanReason: {
+      fontSize: 9,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
+      fontStyle: 'italic' as const,
+      marginTop: 2,
+    },
+    modLevelRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 8,
+    },
+    modLevelPill: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    modLevelPillActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '15',
+    },
+    modLevelPillText: {
+      fontSize: 11,
+      fontWeight: '800' as const,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
+    },
+    modLevelPillTextActive: {
+      color: theme.primary,
+    },
+    modBanTypeRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: 8,
+      flexWrap: 'wrap',
+    },
+    modBanTypePill: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    modBanTypePillActive: {
+      borderColor: theme.danger,
+      backgroundColor: theme.danger + '15',
+    },
+    modBanTypePillText: {
+      fontSize: 10,
+      fontWeight: '700' as const,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
+    },
+    modBanTypePillTextActive: {
+      color: theme.danger,
     },
   });

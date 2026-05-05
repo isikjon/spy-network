@@ -12,7 +12,8 @@ import {
 } from "../utils/admin-auth";
 
 type UserAppData = {
-  phoneNumber: string;
+  uid: string;
+  phoneNumber?: string;
   dossiers: unknown[];
   sectors: string[];
   powerGroupings: string[];
@@ -97,7 +98,14 @@ const requireAdminRole = (
   return roles.includes(role);
 };
 
-const userKeyToPhone = (key: string) => {
+const userKeyToUid = (key: string) => {
+  if (key.startsWith("user_data:")) {
+    return key.slice("user_data:".length) || null;
+  }
+  return null;
+};
+
+const legacyUserKeyToPhone = (key: string) => {
   const parts = key.split(":");
   if (parts.length < 3) return null;
   if (parts[0] !== "user") return null;
@@ -276,26 +284,28 @@ export const adminRouter = createTRPCRouter({
       }
 
       const query = (input?.query ?? "").trim();
-      const keys = await storeListKeys("user:");
-      const dataKeys = keys.filter((k) => k.endsWith(":data"));
+      const keys = await storeListKeys("user_data:");
 
-      const phones = dataKeys
-        .map((k) => userKeyToPhone(k))
-        .filter((p): p is string => typeof p === "string" && p.length > 0)
-        .filter((p) => (query.length > 0 ? p.includes(query) : true))
+      const uids = keys
+        .map((k) => userKeyToUid(k))
+        .filter((u): u is string => typeof u === "string" && u.length > 0)
         .slice(0, input?.limit ?? 200);
 
       const users: {
+        uid: string;
         phoneNumber: string;
         dossiersCount: number;
         updatedAt: number;
       }[] = [];
 
-      for (const phone of phones) {
-        const stored = await storeGet<UserAppData>(`user:${phone}:data`);
+      for (const uid of uids) {
+        const stored = await storeGet<UserAppData>(`user_data:${uid}`);
         if (!stored) continue;
+        const displayPhone = stored.phoneNumber ? maskPhone(stored.phoneNumber) : uid.slice(0, 8);
+        if (query.length > 0 && !displayPhone.includes(query) && !uid.includes(query)) continue;
         users.push({
-          phoneNumber: maskPhone(stored.phoneNumber || phone),
+          uid,
+          phoneNumber: displayPhone,
           dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
           updatedAt: typeof stored.updatedAt === "number" ? stored.updatedAt : 0,
         });
@@ -314,14 +324,17 @@ export const adminRouter = createTRPCRouter({
     .input(z.object({ phoneNumber: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       console.log("[backend] admin.analyticsUserDossier", {
-        phoneNumber: input.phoneNumber,
+        identifier: input.phoneNumber,
       });
 
       if (!isAdminRequest(ctx) || !requireAdminRole(ctx, ["admin", "analyst"])) {
         return { ok: false as const, error: "FORBIDDEN" as const };
       }
 
-      const stored = await storeGet<UserAppData>(`user:${input.phoneNumber}:data`);
+      let stored = await storeGet<UserAppData>(`user_data:${input.phoneNumber}`);
+      if (!stored) {
+        stored = await storeGet<UserAppData>(`user:${input.phoneNumber}:data`);
+      }
       if (!stored) return { ok: false as const, error: "NOT_FOUND" as const };
 
       const dossiers = Array.isArray(stored.dossiers) ? stored.dossiers : [];
@@ -348,7 +361,7 @@ export const adminRouter = createTRPCRouter({
 
       return {
         ok: true as const,
-        phoneNumber: maskPhone(stored.phoneNumber),
+        phoneNumber: maskPhone(stored.phoneNumber ?? stored.uid ?? input.phoneNumber),
         contactsCount: contacts.length,
         contacts,
       };
@@ -358,14 +371,17 @@ export const adminRouter = createTRPCRouter({
     .input(z.object({ phoneNumber: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       console.log("[backend] admin.analyticsUserNetworkMap", {
-        phoneNumber: input.phoneNumber,
+        identifier: input.phoneNumber,
       });
 
       if (!isAdminRequest(ctx) || !requireAdminRole(ctx, ["admin", "analyst"])) {
         return { ok: false as const, error: "FORBIDDEN" as const };
       }
 
-      const stored = await storeGet<UserAppData>(`user:${input.phoneNumber}:data`);
+      let stored = await storeGet<UserAppData>(`user_data:${input.phoneNumber}`);
+      if (!stored) {
+        stored = await storeGet<UserAppData>(`user:${input.phoneNumber}:data`);
+      }
       if (!stored) return { ok: false as const, error: "NOT_FOUND" as const };
 
       const dossiers = Array.isArray(stored.dossiers) ? stored.dossiers : [];
@@ -419,19 +435,22 @@ export const adminRouter = createTRPCRouter({
     .input(z.object({ phoneNumber: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       console.log("[backend] admin.analyticsUserProfile", {
-        phoneNumber: input.phoneNumber,
+        identifier: input.phoneNumber,
       });
 
       if (!isAdminRequest(ctx) || !requireAdminRole(ctx, ["admin", "analyst"])) {
         return { ok: false as const, error: "FORBIDDEN" as const };
       }
 
-      const stored = await storeGet<UserAppData>(`user:${input.phoneNumber}:data`);
+      let stored = await storeGet<UserAppData>(`user_data:${input.phoneNumber}`);
+      if (!stored) {
+        stored = await storeGet<UserAppData>(`user:${input.phoneNumber}:data`);
+      }
       if (!stored) return { ok: false as const, error: "NOT_FOUND" as const };
 
       return {
         ok: true as const,
-        phoneNumber: maskPhone(stored.phoneNumber),
+        phoneNumber: maskPhone(stored.phoneNumber ?? stored.uid ?? input.phoneNumber),
         updatedAt: stored.updatedAt,
         dossiersCount: Array.isArray(stored.dossiers) ? stored.dossiers.length : 0,
         sectors: Array.isArray(stored.sectors) ? stored.sectors : [],
@@ -460,20 +479,19 @@ export const adminRouter = createTRPCRouter({
       const phoneQuery = normalizePhone(phoneQueryRaw);
       const onlyPowerGroupings = input?.onlyPowerGroupings ?? false;
 
-      const keys = await storeListKeys("user:");
-      const dataKeys = keys.filter((k) => k.endsWith(":data"));
+      const keys = await storeListKeys("user_data:");
+      const dataKeys = keys;
 
       const contactsMap = new Map<string, ContactLite>();
 
       for (const k of dataKeys) {
-        const phone = userKeyToPhone(k);
-        if (!phone) continue;
+        const uid = userKeyToUid(k) ?? "";
 
         const stored = await storeGet<UserAppData>(k);
         if (!stored || !Array.isArray(stored.dossiers)) continue;
 
         for (const d of stored.dossiers) {
-          const c = contactFromDossier(phone, d);
+          const c = contactFromDossier(uid, d);
           if (!c) continue;
 
           if (onlyPowerGroupings && !c.groupName) continue;
@@ -513,20 +531,19 @@ export const adminRouter = createTRPCRouter({
         return { ok: false as const, error: "FORBIDDEN" as const };
       }
 
-      const keys = await storeListKeys("user:");
-      const dataKeys = keys.filter((k) => k.endsWith(":data"));
+      const keys = await storeListKeys("user_data:");
+      const dataKeys = keys;
 
       const allPowerContactsById = new Map<string, ContactLite>();
 
       for (const k of dataKeys) {
-        const phone = userKeyToPhone(k);
-        if (!phone) continue;
+        const uid = userKeyToUid(k) ?? "";
 
         const stored = await storeGet<UserAppData>(k);
         if (!stored || !Array.isArray(stored.dossiers)) continue;
 
         for (const d of stored.dossiers) {
-          const c = contactFromDossier(phone, d);
+          const c = contactFromDossier(uid, d);
           if (!c) continue;
           if (!c.groupName) continue;
           if (!allPowerContactsById.has(c.id)) allPowerContactsById.set(c.id, c);
@@ -600,8 +617,8 @@ export const adminRouter = createTRPCRouter({
         return { ok: false as const, error: "FORBIDDEN" as const };
       }
 
-      const keys = await storeListKeys("user:");
-      const dataKeys = keys.filter((k) => k.endsWith(":data"));
+      const keys = await storeListKeys("user_data:");
+      const dataKeys = keys;
 
       const edges: Map<string, Set<string>> = new Map();
       const contactsById = new Map<string, { id: string; name: string; phoneNumbers: string[]; ownerPhoneNumber: string }>();
@@ -612,7 +629,7 @@ export const adminRouter = createTRPCRouter({
       };
 
       for (const k of dataKeys) {
-        const ownerPhone = userKeyToPhone(k) ?? "";
+        const ownerPhone = userKeyToUid(k) ?? "";
         const stored = await storeGet<UserAppData>(k);
         if (!stored || !Array.isArray(stored.dossiers)) continue;
 
@@ -682,8 +699,8 @@ export const adminRouter = createTRPCRouter({
       return { ok: false as const, error: "FORBIDDEN" as const };
     }
 
-    const keys = await storeListKeys("user:");
-    const dataKeys = keys.filter((k) => k.endsWith(":data"));
+    const keys = await storeListKeys("user_data:");
+    const dataKeys = keys;
 
     const counts: Record<string, number> = {};
 

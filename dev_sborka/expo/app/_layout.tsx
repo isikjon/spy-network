@@ -41,7 +41,6 @@ function RootLayoutNav() {
     if (!rootNavState?.key) return;
 
     if (!isAuthenticated && !inAuth && !inAdmin) {
-      if (hasNavigated.current) return;
       console.log('[RootLayoutNav] redirect -> /auth', { rootSegment, isAuthenticated });
       hasNavigated.current = true;
       setTimeout(() => {
@@ -51,17 +50,15 @@ function RootLayoutNav() {
     }
 
     if (isAuthenticated && inAuth) {
-      if (hasNavigated.current) return;
       console.log('[RootLayoutNav] redirect -> /(tabs)', { rootSegment, isAuthenticated });
       hasNavigated.current = true;
       setTimeout(() => {
         router.replace('/(tabs)');
       }, 0);
+      return;
     }
 
-    if ((isAuthenticated && !inAuth && !inAdmin) || (!isAuthenticated && inAuth)) {
-      hasNavigated.current = false;
-    }
+    hasNavigated.current = false;
   }, [inAdmin, inAuth, isAuthenticated, isLoading, rootNavState?.key, rootSegment, router]);
 
   useEffect(() => {

@@ -17,6 +17,7 @@ export type SubscriptionLevel = 'basic' | 'working';
 
 const STORAGE_KEYS = {
   PHONE_NUMBER: 'user_phone',
+  USER_UID: 'user_uid',
   SESSION_TOKEN: 'user_session_token',
   THEME: 'app_theme',
   POWER_GROUPINGS: 'power_groupings',
@@ -62,6 +63,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   const queryClient = useQueryClient();
 
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  const [userUid, setUserUid] = useState<string | null>(null);
 
   const [dossiers, setDossiers] = useState<ContactDossier[]>([]);
   const [sectors, setSectors] = useState<string[]>(DEFAULT_SECTORS);
@@ -80,6 +82,14 @@ export const [AppProvider, useApp] = createContextHook(() => {
     queryKey: ['user_phone'],
     queryFn: async () => {
       const stored = await AsyncStorage.getItem(STORAGE_KEYS.PHONE_NUMBER);
+      return stored;
+    },
+  });
+
+  const uidQuery = useQuery({
+    queryKey: ['user_uid'],
+    queryFn: async () => {
+      const stored = await AsyncStorage.getItem(STORAGE_KEYS.USER_UID);
       return stored;
     },
   });
@@ -114,9 +124,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
   });
 
   const goalsQuery = useQuery({
-    queryKey: ['strategic_goals'],
+    queryKey: ['strategic_goals', userUid],
     queryFn: async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEYS.GOALS);
+      if (!userUid) return [];
+      const userKey = `${STORAGE_KEYS.GOALS}_${userUid}`;
+      const stored = await AsyncStorage.getItem(userKey);
       if (!stored) return [];
       try {
         return JSON.parse(stored) as StrategicGoal[];
@@ -124,6 +136,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         return [];
       }
     },
+    enabled: !!userUid,
   });
 
   const DEFAULT_GOAL_DIRECTIONS: GoalDirection[] = [
@@ -134,9 +147,11 @@ export const [AppProvider, useApp] = createContextHook(() => {
   ];
 
   const goalDirectionsQuery = useQuery({
-    queryKey: ['goal_directions'],
+    queryKey: ['goal_directions', userUid],
     queryFn: async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEYS.GOAL_DIRECTIONS);
+      if (!userUid) return DEFAULT_GOAL_DIRECTIONS;
+      const userKey = `${STORAGE_KEYS.GOAL_DIRECTIONS}_${userUid}`;
+      const stored = await AsyncStorage.getItem(userKey);
       if (!stored) return DEFAULT_GOAL_DIRECTIONS;
       try {
         const parsed = JSON.parse(stored) as GoalDirection[];
@@ -145,6 +160,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
         return DEFAULT_GOAL_DIRECTIONS;
       }
     },
+    enabled: !!userUid,
   });
 
   const subscriptionQuery = useQuery({
@@ -178,7 +194,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
   });
 
   const appDataQuery = trpc.appData.getMyData.useQuery(undefined, {
-    enabled: !!phoneNumber,
+    enabled: !!phoneNumber && !!userUid,
     staleTime: 60_000,
     refetchInterval: Platform.OS === 'web' ? false : 60_000,
     refetchOnWindowFocus: false,
@@ -255,6 +271,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
   }, [phoneQuery.data]);
 
   useEffect(() => {
+    if (uidQuery.data !== undefined) {
+      setUserUid(uidQuery.data);
+    }
+  }, [uidQuery.data]);
+
+  useEffect(() => {
     if (themeQuery.data) {
       setCurrentTheme(themeQuery.data);
       setTheme(themes[themeQuery.data]);
@@ -311,11 +333,12 @@ export const [AppProvider, useApp] = createContextHook(() => {
       const data = (appDataQuery.data as any).data;
       console.log('[AppContext] hydrate from server', {
         dossiers: Array.isArray(data?.dossiers) ? data.dossiers.length : -1,
+        goals: Array.isArray(data?.goals) ? data.goals.length : -1,
+        goalDirections: Array.isArray(data?.goalDirections) ? data.goalDirections.length : -1,
         updatedAt: data?.updatedAt,
         level: data?.level,
       });
 
-      // Синхронизируем уровень подписки с сервером
       if (typeof data?.level === 'number') {
         const serverLevel: SubscriptionLevel = data.level >= 2 ? 'working' : 'basic';
         setSubscriptionLevel(serverLevel);
@@ -330,8 +353,37 @@ export const [AppProvider, useApp] = createContextHook(() => {
           : DEFAULT_POWER_GROUPINGS,
         updatedAt: typeof data?.updatedAt === 'number' ? data.updatedAt : Date.now(),
       });
+
+      if (typeof data?.uid === 'string' && data.uid && !userUid) {
+        setUserUid(data.uid);
+        AsyncStorage.setItem(STORAGE_KEYS.USER_UID, data.uid).catch(e =>
+          console.log('[AppContext] persist uid from server failed', e)
+        );
+      }
+
+      if (Array.isArray(data?.goals)) {
+        setGoals(data.goals);
+        if (userUid) {
+          const userKey = `${STORAGE_KEYS.GOALS}_${userUid}`;
+          AsyncStorage.setItem(userKey, JSON.stringify(data.goals)).catch(e =>
+            console.log('[AppContext] cache goals locally failed', e)
+          );
+          queryClient.setQueryData(['strategic_goals', userUid], data.goals);
+        }
+      }
+
+      if (Array.isArray(data?.goalDirections) && data.goalDirections.length > 0) {
+        setGoalDirections(data.goalDirections);
+        if (userUid) {
+          const userKey = `${STORAGE_KEYS.GOAL_DIRECTIONS}_${userUid}`;
+          AsyncStorage.setItem(userKey, JSON.stringify(data.goalDirections)).catch(e =>
+            console.log('[AppContext] cache goalDirections locally failed', e)
+          );
+          queryClient.setQueryData(['goal_directions', userUid], data.goalDirections);
+        }
+      }
     }
-  }, [appDataQuery.data, applyAppData, saveSubscription]);
+  }, [appDataQuery.data, applyAppData, saveSubscription, userUid, queryClient]);
 
   useEffect(() => {
     const migrateIfNeeded = async () => {
@@ -387,8 +439,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const saveAppDataToServer = useCallback(
     async (next: { dossiers: ContactDossier[]; sectors: string[]; powerGroupings: string[] }) => {
-      if (!phoneNumber) {
-        console.log('[AppContext] saveAppDataToServer skipped: no phone');
+      if (!phoneNumber || !userUid) {
+        console.log('[AppContext] saveAppDataToServer skipped: no phone/uid');
         return;
       }
 
@@ -405,37 +457,55 @@ export const [AppProvider, useApp] = createContextHook(() => {
         console.log('[AppContext] saveMyData failed', e);
       }
     },
-    [applyAppData, phoneNumber, saveMyDataMutation],
+    [applyAppData, phoneNumber, userUid, saveMyDataMutation],
   );
 
-  const login = useCallback(async (phone: string) => {
+  const login = useCallback(async (phone: string, uid?: string) => {
     setPhoneNumber(phone);
     await AsyncStorage.setItem(STORAGE_KEYS.PHONE_NUMBER, phone);
+    if (uid) {
+      setUserUid(uid);
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_UID, uid);
+    }
 
     queryClient.invalidateQueries({ queryKey: ['user_phone'] }).catch((e) =>
       console.log('[AppContext] invalidate phone query failed', e),
     );
+    queryClient.invalidateQueries({ queryKey: ['user_uid'] }).catch((e) =>
+      console.log('[AppContext] invalidate uid query failed', e),
+    );
   }, [queryClient]);
 
-  const loginWithToken = useCallback(async (phone: string, token: string) => {
+  const loginWithToken = useCallback(async (phone: string, token: string, uid?: string) => {
     setPhoneNumber(phone);
     await AsyncStorage.setItem(STORAGE_KEYS.PHONE_NUMBER, phone);
     await AsyncStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, token);
+    if (uid) {
+      setUserUid(uid);
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_UID, uid);
+    }
 
     queryClient.invalidateQueries({ queryKey: ['user_phone'] }).catch((e) =>
       console.log('[AppContext] invalidate phone query failed', e),
+    );
+    queryClient.invalidateQueries({ queryKey: ['user_uid'] }).catch((e) =>
+      console.log('[AppContext] invalidate uid query failed', e),
     );
   }, [queryClient]);
 
   const logout = useCallback(async () => {
     setPhoneNumber(null);
+    setUserUid(null);
     setDossiers([]);
     setSectors(DEFAULT_SECTORS);
     setPowerGroupings(DEFAULT_POWER_GROUPINGS);
+    setGoals([]);
+    setGoalDirections([]);
     setSelfContactEnsuredForPhone(null);
 
     await AsyncStorage.multiRemove([
       STORAGE_KEYS.PHONE_NUMBER,
+      STORAGE_KEYS.USER_UID,
       STORAGE_KEYS.SESSION_TOKEN,
       STORAGE_KEYS.APP_DATA_CACHE,
     ]);
@@ -635,25 +705,47 @@ export const [AppProvider, useApp] = createContextHook(() => {
     saveTutorialCompleted(false);
   }, [saveTutorialCompleted]);
 
+  const saveGoalsToServer = useCallback(async (nextGoals: StrategicGoal[], nextDirections?: GoalDirection[]) => {
+    if (!phoneNumber || !userUid) return;
+    try {
+      const res = await saveMyDataMutation.mutateAsync({
+        dossiers,
+        sectors,
+        powerGroupings,
+        goals: nextGoals,
+        goalDirections: nextDirections ?? goalDirections,
+      });
+      console.log('[AppContext] saveGoalsToServer result', res);
+    } catch (e) {
+      console.log('[AppContext] saveGoalsToServer failed', e);
+    }
+  }, [phoneNumber, userUid, dossiers, sectors, powerGroupings, goalDirections, saveMyDataMutation]);
+
   const persistGoals = useCallback(async (next: StrategicGoal[]) => {
     setGoals(next);
+    if (!userUid) return;
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.GOALS, JSON.stringify(next));
-      queryClient.setQueryData(['strategic_goals'], next);
+      const userKey = `${STORAGE_KEYS.GOALS}_${userUid}`;
+      await AsyncStorage.setItem(userKey, JSON.stringify(next));
+      queryClient.setQueryData(['strategic_goals', userUid], next);
     } catch (e) {
-      console.log('[AppContext] failed to persist goals', e);
+      console.log('[AppContext] failed to persist goals locally', e);
     }
-  }, [queryClient]);
+    void saveGoalsToServer(next);
+  }, [queryClient, userUid, saveGoalsToServer]);
 
   const persistGoalDirections = useCallback(async (next: GoalDirection[]) => {
     setGoalDirections(next);
+    if (!userUid) return;
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.GOAL_DIRECTIONS, JSON.stringify(next));
-      queryClient.setQueryData(['goal_directions'], next);
+      const userKey = `${STORAGE_KEYS.GOAL_DIRECTIONS}_${userUid}`;
+      await AsyncStorage.setItem(userKey, JSON.stringify(next));
+      queryClient.setQueryData(['goal_directions', userUid], next);
     } catch (e) {
-      console.log('[AppContext] failed to persist goal directions', e);
+      console.log('[AppContext] failed to persist goal directions locally', e);
     }
-  }, [queryClient]);
+    void saveGoalsToServer(goals, next);
+  }, [queryClient, userUid, goals, saveGoalsToServer]);
 
   const addGoal = useCallback((goal: StrategicGoal) => {
     const updated = [...goals, goal];
@@ -823,8 +915,9 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   const isLoading =
     phoneQuery.isLoading ||
+    uidQuery.isLoading ||
     cacheQuery.isLoading ||
-    (phoneNumber ? appDataQuery.isLoading : false);
+    (phoneNumber && userUid ? appDataQuery.isLoading : false);
 
   const serverError = useMemo(() => {
     if (!appDataQuery.error) return null;
@@ -833,7 +926,8 @@ export const [AppProvider, useApp] = createContextHook(() => {
 
   return useMemo(() => ({
     phoneNumber,
-    isAuthenticated: !!phoneNumber,
+    userUid,
+    isAuthenticated: !!phoneNumber && !!userUid,
     isLoading,
     serverError,
 
@@ -886,6 +980,7 @@ export const [AppProvider, useApp] = createContextHook(() => {
     subscriptionLevel,
     changeSubscription,
   }), [
+    userUid,
     addDossier,
     addGoal,
     addPowerGrouping,

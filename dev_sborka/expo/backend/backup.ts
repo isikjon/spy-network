@@ -1,27 +1,38 @@
-/**
- * Автоматические резервные копии базы данных (store.json).
- * - Запускается при старте сервера
- * - Делает бэкап каждые 24 часа
- * - Хранит последние 7 бэкапов
- */
+let nodeFs: typeof import("fs") | null = null;
+let nodePath: typeof import("path") | null = null;
+let nodeOs: typeof import("os") | null = null;
+let nodeModulesLoaded = false;
 
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
-
-const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 часа
-const MAX_BACKUPS = 7;
-
-function getStorePath(): string {
-  const env = process.env.STORE_PATH;
-  if (env && typeof env === "string" && env.trim()) return env.trim();
-
-  const projectId = process.env.EXPO_PUBLIC_PROJECT_ID || "default-project";
-  return path.join(os.tmpdir(), "rork-app-data", `${projectId}-store.json`);
+async function loadNodeModules(): Promise<boolean> {
+  if (nodeModulesLoaded) return !!nodeFs;
+  nodeModulesLoaded = true;
+  try {
+    nodeFs = await import("node:fs");
+    nodePath = await import("node:path");
+    nodeOs = await import("node:os");
+    return true;
+  } catch {
+    console.log("[backup] Node.js modules not available, backups disabled");
+    return false;
+  }
 }
 
-function getBackupDir(): string {
-  return path.join(path.dirname(getStorePath()), "backups");
+const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MAX_BACKUPS = 7;
+
+function getStorePath(): string | null {
+  if (!nodePath || !nodeOs) return null;
+  const env = process.env.STORE_PATH;
+  if (env && typeof env === "string" && env.trim()) return env.trim();
+  const projectId = process.env.EXPO_PUBLIC_PROJECT_ID || "default-project";
+  return nodePath.join(nodeOs.tmpdir(), "rork-app-data", `${projectId}-store.json`);
+}
+
+function getBackupDir(): string | null {
+  if (!nodePath) return null;
+  const sp = getStorePath();
+  if (!sp) return null;
+  return nodePath.join(nodePath.dirname(sp), "backups");
 }
 
 function formatDate(date: Date): string {
@@ -34,29 +45,35 @@ function formatDate(date: Date): string {
 }
 
 async function createBackup(): Promise<void> {
+  const hasNode = await loadNodeModules();
+  if (!hasNode || !nodeFs || !nodePath) {
+    console.log("[backup] skipping backup: no filesystem access");
+    return;
+  }
+
   const storePath = getStorePath();
   const backupDir = getBackupDir();
+  if (!storePath || !backupDir) return;
 
   try {
-    if (!fs.existsSync(storePath)) {
+    if (!nodeFs.existsSync(storePath)) {
       console.log("[backup] store.json not found, skipping backup");
       return;
     }
 
-    if (!fs.existsSync(backupDir)) {
-      fs.mkdirSync(backupDir, { recursive: true });
+    if (!nodeFs.existsSync(backupDir)) {
+      nodeFs.mkdirSync(backupDir, { recursive: true });
     }
 
     const backupName = `store-backup-${formatDate(new Date())}.json`;
-    const backupPath = path.join(backupDir, backupName);
+    const backupPath = nodePath.join(backupDir, backupName);
 
-    fs.copyFileSync(storePath, backupPath);
+    nodeFs.copyFileSync(storePath, backupPath);
 
-    const stats = fs.statSync(backupPath);
+    const stats = nodeFs.statSync(backupPath);
     const sizeKb = Math.round(stats.size / 1024);
     console.log(`[backup] created ${backupName} (${sizeKb}KB)`);
 
-    // Удаляем старые бэкапы (оставляем последние MAX_BACKUPS)
     await cleanupOldBackups();
   } catch (e) {
     console.error("[backup] failed to create backup", e);
@@ -64,12 +81,14 @@ async function createBackup(): Promise<void> {
 }
 
 async function cleanupOldBackups(): Promise<void> {
+  if (!nodeFs || !nodePath) return;
   const backupDir = getBackupDir();
+  if (!backupDir) return;
 
   try {
-    if (!fs.existsSync(backupDir)) return;
+    if (!nodeFs.existsSync(backupDir)) return;
 
-    const files = fs.readdirSync(backupDir)
+    const files = nodeFs.readdirSync(backupDir)
       .filter((f) => f.startsWith("store-backup-") && f.endsWith(".json"))
       .sort()
       .reverse();
@@ -78,8 +97,8 @@ async function cleanupOldBackups(): Promise<void> {
 
     const toDelete = files.slice(MAX_BACKUPS);
     for (const file of toDelete) {
-      const filePath = path.join(backupDir, file);
-      fs.unlinkSync(filePath);
+      const filePath = nodePath.join(backupDir, file);
+      nodeFs.unlinkSync(filePath);
       console.log(`[backup] deleted old backup: ${file}`);
     }
   } catch (e) {
@@ -89,23 +108,15 @@ async function cleanupOldBackups(): Promise<void> {
 
 let backupInterval: ReturnType<typeof setInterval> | null = null;
 
-/**
- * Запуск автоматических бэкапов.
- * Делает первый бэкап через 5 минут после запуска, потом каждые 24 часа.
- */
 export function startBackupScheduler(): void {
   console.log("[backup] scheduler started, interval: 24h, max backups:", MAX_BACKUPS);
 
-  // Первый бэкап через 5 минут (чтоб сервер успел загрузить данные)
   setTimeout(() => {
     void createBackup();
     backupInterval = setInterval(createBackup, BACKUP_INTERVAL_MS);
   }, 5 * 60 * 1000);
 }
 
-/**
- * Остановить бэкапы (для тестов).
- */
 export function stopBackupScheduler(): void {
   if (backupInterval) {
     clearInterval(backupInterval);
@@ -113,7 +124,4 @@ export function stopBackupScheduler(): void {
   }
 }
 
-/**
- * Ручное создание бэкапа (для админ-API).
- */
 export { createBackup };

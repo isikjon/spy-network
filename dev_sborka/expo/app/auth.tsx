@@ -82,13 +82,13 @@ export default function AuthScreen() {
         if (!active) return;
 
         if (result.ok === true) {
-          // Верифицирован!
           const token = (result as any).token as string;
           const verifiedPhone = (result as any).phone as string;
+          const verifiedUid = (result as any).uid as string;
           setStep('done');
 
           try {
-            await loginWithToken(verifiedPhone, token);
+            await loginWithToken(verifiedPhone, token, verifiedUid);
             setTimeout(() => router.replace('/'), 800);
           } catch (e) {
             console.error('[auth] login failed', e);
@@ -163,7 +163,7 @@ export default function AuthScreen() {
       console.log('[auth] test phone detected, bypassing callback flow', { phone: rawPhone });
       setStep('done');
       try {
-        await login(rawPhone);
+        await login(rawPhone, undefined);
         setTimeout(() => router.replace('/'), 300);
       } catch (e) {
         console.error('[auth] test phone login failed', e);

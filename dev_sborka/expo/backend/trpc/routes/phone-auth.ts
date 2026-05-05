@@ -3,6 +3,7 @@ import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { plusofonCallToAuth } from "../utils/plusofon";
 import { createUserSession, deleteUserSession } from "../utils/user-session";
+import { getOrCreateUid } from "../utils/uid-manager";
 import { storeGet, storeSet, storeDelete } from "../../store";
 
 /**
@@ -97,7 +98,8 @@ export const phoneAuthRouter = createTRPCRouter({
         await storeSet(pendingKey(phone), pending);
 
         // Генерируем демо-данные если их ещё нет
-        await ensureTestData(phone);
+        const testUid = await getOrCreateUid(phone);
+        await ensureTestData(testUid);
 
         return {
           ok: true as const,
@@ -197,14 +199,37 @@ export const phoneAuthRouter = createTRPCRouter({
 
       // Верифицирован! Создаём сессию и демо-данные если нужно.
       await storeDelete(pendingKey(phone));
-      const session = await createUserSession(phone);
-      await ensureTestData(phone);
+      const uid = await getOrCreateUid(phone);
+      const session = await createUserSession(phone, uid);
+      await ensureTestData(uid);
 
       return {
         ok: true as const,
         token: session.token,
         phone: session.phone,
+        uid: session.uid,
         expiresAt: session.expiresAt,
+      };
+    }),
+
+  /**
+   * Web-вход без верификации: создаёт UID + сессию по номеру.
+   */
+  webLogin: publicProcedure
+    .input(z.object({ phone: z.string().min(10) }))
+    .mutation(async ({ input }) => {
+      const phone = normalizePhone(input.phone);
+      if (phone.length < 11) {
+        return { ok: false as const, error: "INVALID_PHONE" as const };
+      }
+      const uid = await getOrCreateUid(phone);
+      const session = await createUserSession(phone, uid);
+      console.log("[phone-auth] webLogin", { phone, uid });
+      return {
+        ok: true as const,
+        phone,
+        uid,
+        token: session.token,
       };
     }),
 
@@ -213,10 +238,11 @@ export const phoneAuthRouter = createTRPCRouter({
    */
   me: publicProcedure.query(async ({ ctx }) => {
     const phone = ctx.userPhone;
-    if (!phone) {
+    const uid = ctx.userUid;
+    if (!phone || !uid) {
       return { ok: false as const, error: "UNAUTHENTICATED" as const };
     }
-    return { ok: true as const, phone };
+    return { ok: true as const, phone, uid };
   }),
 
   /**
@@ -238,19 +264,19 @@ export const phoneAuthRouter = createTRPCRouter({
  * Генерация демо-данных для нового пользователя.
  * Вызывается для всех новых пользователей при первой авторизации.
  */
-async function ensureTestData(phone: string) {
-  const dataKey = `user:${phone}:data`;
+async function ensureTestData(uid: string) {
+  const dataKey = `user_data:${uid}`;
   const existing = await storeGet<{ dossiers?: unknown[] }>(dataKey);
   // Пропускаем только если уже есть хотя бы один контакт
   if (existing && Array.isArray((existing as any).dossiers) && (existing as any).dossiers.length > 0) return;
 
-  console.log("[phone-auth] generating demo data for new user", phone);
+  console.log("[phone-auth] generating demo data for new user", uid);
 
   const now = Date.now();
   const day = 86400000;
 
   const demoData = {
-    phoneNumber: phone,
+    uid,
     dossiers: [
       {
         contact: {
@@ -267,10 +293,10 @@ async function ensureTestData(phone: string) {
         functionalCircle: "productivity" as const,
         importance: "critical" as const,
         relations: [
-          { contactId: "demo-2", strength: 85 },
-          { contactId: "demo-3", strength: 60 },
-          { contactId: "demo-4", strength: 50 },
-          { contactId: "demo-5", strength: 40 },
+          { contactId: "demo-2", strength: 9 },
+          { contactId: "demo-3", strength: 6 },
+          { contactId: "demo-4", strength: 5 },
+          { contactId: "demo-5", strength: 4 },
         ],
         diary: [
           { id: "d1", date: new Date(now - 3 * day), type: "manual" as const, content: "Встреча в офисе. Обсудили условия контракта на Q2." },
@@ -295,7 +321,7 @@ async function ensureTestData(phone: string) {
         sectors: ["business"],
         functionalCircle: "development" as const,
         importance: "high" as const,
-        relations: [{ contactId: "demo-1", strength: 85 }],
+        relations: [{ contactId: "demo-1", strength: 9 }],
         diary: [
           { id: "d3", date: new Date(now - 5 * day), type: "manual" as const, content: "Отправлены финансовые документы на согласование." },
           { id: "d3a", date: new Date(now - 4 * day), type: "manual" as const, content: "1. Что сделать для развития отношений?\nПлан:\nРезультат:\n\n2. Как узнать о человеке больше\nПлан:\nРезультат:\n\n3. Что я могу дать?\nПлан:\nРезультат:\n\n4. Что попросить?\nПлан:\nРезультат:\n\n5. Как обеспечить следующую встречу?\nПлан:\nРезультат:" },
@@ -319,8 +345,8 @@ async function ensureTestData(phone: string) {
         functionalCircle: "development" as const,
         importance: "high" as const,
         relations: [
-          { contactId: "demo-1", strength: 60 },
-          { contactId: "demo-6", strength: 75 },
+          { contactId: "demo-1", strength: 6 },
+          { contactId: "demo-6", strength: 8 },
         ],
         diary: [
           { id: "d4", date: new Date(now - 7 * day), type: "manual" as const, content: "Созвон по API интеграции. Получили документацию." },
@@ -343,7 +369,7 @@ async function ensureTestData(phone: string) {
         sectors: ["personal", "other"],
         functionalCircle: "support" as const,
         importance: "medium" as const,
-        relations: [{ contactId: "demo-1", strength: 50 }],
+        relations: [{ contactId: "demo-1", strength: 5 }],
         diary: [
           { id: "d5", date: new Date(now - 14 * day), type: "manual" as const, content: "Обсудили медиаплан на весну." },
         ],
@@ -365,7 +391,7 @@ async function ensureTestData(phone: string) {
         sectors: ["business"],
         functionalCircle: "support" as const,
         importance: "medium" as const,
-        relations: [{ contactId: "demo-1", strength: 40 }],
+        relations: [{ contactId: "demo-1", strength: 4 }],
         diary: [],
         addedDate: new Date(now - 10 * day),
       },
@@ -383,7 +409,7 @@ async function ensureTestData(phone: string) {
         sectors: ["politics"],
         functionalCircle: "development" as const,
         importance: "medium" as const,
-        relations: [{ contactId: "demo-3", strength: 75 }],
+        relations: [{ contactId: "demo-3", strength: 8 }],
         diary: [
           { id: "d6", date: new Date(now - 8 * day), type: "manual" as const, content: "Первый контакт. Договорились о повторной встрече через неделю." },
         ],
@@ -404,7 +430,7 @@ async function ensureTestData(phone: string) {
         sectors: ["other"],
         functionalCircle: "development" as const,
         importance: "critical" as const,
-        relations: [{ contactId: "demo-1", strength: 70 }],
+        relations: [{ contactId: "demo-1", strength: 7 }],
         diary: [
           { id: "d7", date: new Date(now - 6 * day), type: "manual" as const, content: "Встреча в нейтральном месте. Обсудили стратегию на квартал." },
         ],
@@ -426,8 +452,8 @@ async function ensureTestData(phone: string) {
         functionalCircle: "productivity" as const,
         importance: "high" as const,
         relations: [
-          { contactId: "demo-1", strength: 55 },
-          { contactId: "demo-2", strength: 45 },
+          { contactId: "demo-1", strength: 6 },
+          { contactId: "demo-2", strength: 5 },
         ],
         diary: [
           { id: "d8", date: new Date(now - 9 * day), type: "manual" as const, content: "Презентация проекта. Получили положительный отклик." },
@@ -442,7 +468,7 @@ async function ensureTestData(phone: string) {
   };
 
   await storeSet(dataKey, demoData);
-  console.log("[phone-auth] demo data created: 8 contacts for", phone);
+  console.log("[phone-auth] demo data created: 8 contacts for uid", uid);
 }
 
 /**

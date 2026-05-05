@@ -120,14 +120,13 @@ app.use("/_expo/*", serveStatic({ root: "dist" }));
 app.use("/assets/*", serveStatic({ root: "dist" }));
 app.get("/favicon.ico", serveStatic({ root: "dist", path: "/favicon.ico" }));
 
-// Скрипт-шим: убирает /app из pathname до старта React (Expo Router найдёт роут),
-// патчит history API чтобы /app-префикс возвращался при любой навигации,
-// и восстанавливает /app после полной загрузки страницы (когда React не делает replaceState).
-const BASE_PATH_SHIM = `<script>(function(){
-  var B='/app';
+  // Скрипт-шим: убирает префикс из pathname до старта React (Expo Router найдёт роут),
+  // патчит history API чтобы префикс возвращался при любой навигации.
+  const BASE_PATH_SHIM = `<script>(function(){
+  var p=location.pathname;
+  var B=p.startsWith('/devsborka/app') ? '/devsborka/app' : '/app';
   var _pu=history.pushState.bind(history);
   var _re=history.replaceState.bind(history);
-  var p=location.pathname;
   if(p===B||p.startsWith(B+'/')){
     _re(null,'',(p.slice(B.length)||'/')+location.search+location.hash);
   }

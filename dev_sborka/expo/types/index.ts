@@ -16,6 +16,8 @@ export interface ContactInfo {
   goal?: string;
   notes?: string;
   photo?: string;
+  birthday?: string;
+  linkedUid?: string;
 }
 
 export interface ContactRelation {
@@ -84,7 +86,7 @@ export interface StrategicGoal {
   title: string;
   description: string;
   deadline: string;
-  progress: number;
+  priority: number;
   contactIds: string[];
   nextStep: string;
   notes: string;
@@ -99,7 +101,109 @@ export interface GoalDirection {
   order: number;
 }
 
+export type OsintFieldSource = 'llm' | 'manual';
+
+export interface OsintSourcedField<T> {
+  value: T;
+  source: OsintFieldSource;
+}
+
+export interface OsintFacts {
+  contacts: OsintSourcedField<string>;
+  home: OsintSourcedField<string>;
+  work: OsintSourcedField<string>;
+  family: OsintSourcedField<string>;
+  hobbies: OsintSourcedField<string[]>;
+  friends: OsintSourcedField<string[]>;
+  enemies: OsintSourcedField<string[]>;
+  assets: OsintSourcedField<string[]>;
+  debts: OsintSourcedField<string[]>;
+}
+
+export interface OsintTraits {
+  relationshipHistory: OsintSourcedField<string>;
+  honesty: OsintSourcedField<string>;
+  helpfulness: OsintSourcedField<string>;
+  emotionalStability: OsintSourcedField<string>;
+}
+
+export interface OsintMotivation {
+  goals: OsintSourcedField<string[]>;
+  fears: OsintSourcedField<string[]>;
+  dreams: OsintSourcedField<string[]>;
+  politicalViews: OsintSourcedField<string>;
+}
+
+export interface OsintSummary {
+  profile: OsintSourcedField<string>;
+  behaviorPrediction: OsintSourcedField<string>;
+  risks: OsintSourcedField<string[]>;
+  opportunities: OsintSourcedField<string[]>;
+}
+
+export interface OsintAnalysis {
+  facts: OsintFacts;
+  traits: OsintTraits;
+  motivation: OsintMotivation;
+  aiSummary: OsintSummary;
+  updatedAt: string;
+}
+
+export interface OsintInputData {
+  nicknames: string;
+  profileLinks: string;
+  interests: string;
+  city: string;
+  freeformText: string;
+  socialUsernames?: {
+    instagram: string;
+    telegram: string;
+    vk: string;
+    twitter: string;
+    linkedin: string;
+  };
+  socialParsed: {
+    instagram: string;
+    telegram: string;
+    vk: string;
+    twitter: string;
+    linkedin: string;
+  };
+}
+
+export interface OsintChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export interface OsintData {
+  contactId: string;
+  input: OsintInputData;
+  analysis: OsintAnalysis | null;
+  chatHistory: OsintChatMessage[];
+}
+
 export type AccessLevel = 1 | 2 | 3 | 4 | 5;
+
+export type BanType = 'write' | 'forum' | 'app';
+
+export interface BanRecord {
+  phone: string;
+  type: BanType;
+  reason: string;
+  bannedBy: string;
+  bannedAt: string;
+  expiresAt: string | null;
+  permanent: boolean;
+}
+
+export interface ModeratorRecord {
+  phone: string;
+  assignedBy: string;
+  assignedAt: string;
+}
 
 export interface ForumCategory {
   id: string;
@@ -117,6 +221,7 @@ export interface ForumTopic {
   categoryId: string;
   title: string;
   authorPhone: string;
+  authorUid?: string;
   authorName: string;
   isPinned: boolean;
   isLocked: boolean;
@@ -129,6 +234,7 @@ export interface ForumMessage {
   id: string;
   topicId: string;
   authorPhone: string;
+  authorUid?: string;
   authorName: string;
   content: string;
   createdAt: string;
@@ -160,6 +266,7 @@ export interface ForumNotification {
 }
 
 export interface ForumProfile {
+  uid: string;
   fullName: string;
   networkingGoals: string;
   competencies: string;
@@ -169,4 +276,5 @@ export interface ForumProfile {
   createdAt: string;
   photoBase64?: string;
   accessLevel?: AccessLevel;
+  isModerator?: boolean;
 }

@@ -1,7 +1,7 @@
 import { useApp } from '@/contexts/AppContext';
 import { trpc } from '@/lib/trpc';
 import { router } from 'expo-router';
-import { Shield, RefreshCw, CheckCircle, AlertTriangle, Smartphone, Phone, Lock } from 'lucide-react-native';
+import { Shield, RefreshCw, CheckCircle, AlertTriangle, Smartphone, Phone, Lock, QrCode } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 
-type AuthStep = 'loading' | 'qr' | 'waiting' | 'done' | 'error' | 'dev' | 'phoneLogin';
+type AuthStep = 'idle' | 'loading' | 'qr' | 'waiting' | 'done' | 'error' | 'dev' | 'phoneLogin';
 
 const BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://spynetwork.ru';
 
@@ -43,7 +43,7 @@ function extractDigits(formatted: string): string {
 
 export default function WebAuthScreen() {
   const { login, loginWithToken, theme } = useApp();
-  const [step, setStep] = useState<AuthStep>('loading');
+  const [step, setStep] = useState<AuthStep>('idle');
   const [sessionId, setSessionId] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [expiresAt, setExpiresAt] = useState(0);
@@ -54,6 +54,7 @@ export default function WebAuthScreen() {
 
   const createSessionMutation = trpc.qrAuth.createSession.useMutation();
   const devLoginMutation = trpc.qrAuth.devLogin.useMutation();
+  const webLoginMutation = trpc.phoneAuth.webLogin.useMutation();
   const utils = trpc.useUtils();
   const styles = createStyles(theme);
   const rawPhone = extractDigits(formattedPhone);
@@ -92,7 +93,7 @@ export default function WebAuthScreen() {
           stopPoll();
           setStep('done');
           try {
-            await loginWithToken(result.phone, result.token);
+            await loginWithToken(result.phone, result.token, (result as any).uid);
             setTimeout(() => router.replace('/(tabs)/profile'), 600);
           } catch {
             setStep('error');
@@ -164,14 +165,22 @@ export default function WebAuthScreen() {
     setStep('phoneLogin');
 
     try {
-      await login(rawPhone);
-      setTimeout(() => router.replace('/(tabs)/profile'), 300);
-    } catch (e: unknown) {
-      console.log('[web-auth] direct phone login failed', e);
+      const result = await webLoginMutation.mutateAsync({ phone: rawPhone });
+      console.log('[web-auth] webLogin result', JSON.stringify(result));
+      if (result.ok) {
+        await loginWithToken(result.phone, result.token, result.uid);
+        console.log('[web-auth] loginWithToken done, waiting for navigation guard');
+        setStep('done');
+      } else {
+        setStep('error');
+        setErrorMsg('Сервер отклонил вход: ' + ((result as any).error || 'unknown'));
+      }
+    } catch (e: any) {
+      console.log('[web-auth] direct phone login failed', e?.message, e);
       setStep('error');
-      setErrorMsg('Не удалось выполнить вход');
+      setErrorMsg('Ошибка сети: ' + (e?.message || 'Сервер недоступен'));
     }
-  }, [isPhoneReady, login, rawPhone]);
+  }, [isPhoneReady, rawPhone, webLoginMutation, loginWithToken]);
 
   useEffect(() => {
     activeRef.current = true;
@@ -187,7 +196,7 @@ export default function WebAuthScreen() {
           if (result.ok) {
             setStep('done');
             try {
-              await loginWithToken(result.phone, result.token);
+              await loginWithToken(result.phone, result.token, (result as any).uid);
               setTimeout(() => router.replace('/(tabs)/profile'), 600);
             } catch {
               setStep('error');
@@ -206,12 +215,11 @@ export default function WebAuthScreen() {
       }
     }
 
-    void createSession();
     return () => {
       activeRef.current = false;
       stopPoll();
     };
-  }, [createSession, devLoginMutation, loginWithToken, stopPoll]);
+  }, [devLoginMutation, loginWithToken, stopPoll]);
 
   const deepLink = `rork-app://qr-confirm?session=${sessionId}&base=${encodeURIComponent(BASE_URL)}`;
 
@@ -285,6 +293,21 @@ export default function WebAuthScreen() {
                 <ActivityIndicator color={theme.primary} size="large" />
                 <Text style={styles.hintText}>DEV ACCESS...</Text>
               </View>
+            )}
+
+            {/* Idle — show QR button */}
+            {step === 'idle' && (
+              <TouchableOpacity
+                style={styles.qrStartButton}
+                onPress={createSession}
+                activeOpacity={0.7}
+                testID="web-auth.startQrButton"
+              >
+                <View style={styles.qrStartButtonBorder}>
+                  <QrCode size={28} color={theme.primary} />
+                  <Text style={styles.qrStartButtonText}>ВОЙТИ ПО QR-КОДУ</Text>
+                </View>
+              </TouchableOpacity>
             )}
 
             {/* Loading */}
@@ -548,6 +571,28 @@ const createStyles = (theme: any) => StyleSheet.create({
     paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: theme.border,
+  },
+  qrStartButton: {
+    width: '100%',
+    maxWidth: 420,
+    marginBottom: 20,
+  },
+  qrStartButtonBorder: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 12,
+    borderWidth: 2,
+    borderColor: theme.border,
+    paddingVertical: 16,
+    backgroundColor: theme.overlay,
+  },
+  qrStartButtonText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
   },
   refreshText: {
     fontSize: 11,

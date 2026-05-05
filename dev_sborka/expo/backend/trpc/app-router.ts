@@ -6,6 +6,8 @@ import { exampleRouter } from "./routes/example";
 import { phoneAuthRouter } from "./routes/phone-auth";
 import { qrAuthRouter } from "./routes/qr-auth";
 import { paymentRouter } from "./routes/payment";
+import { forumRouter } from "./routes/forum";
+import { osintRouter } from "./routes/osint";
 
 export const appRouter = createTRPCRouter({
   example: exampleRouter,
@@ -15,6 +17,8 @@ export const appRouter = createTRPCRouter({
   phoneAuth: phoneAuthRouter,
   qrAuth: qrAuthRouter,
   payment: paymentRouter,
+  forum: forumRouter,
+  osint: osintRouter,
 });
 
 export type AppRouter = typeof appRouter;

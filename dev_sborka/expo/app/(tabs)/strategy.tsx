@@ -1,5 +1,6 @@
 import { useApp } from '@/contexts/AppContext';
-import { GoalDirection, GoalStep, GoalStepType, StrategicGoal, DiaryEntry } from '@/types';
+import { GoalDirection, GoalStep, GoalStepType, StrategicGoal, DiaryEntry, ContactDossier, OsintData, OsintSourcedField } from '@/types';
+import { loadOsintData } from '@/services/osint';
 import {
   Target,
   Plus,
@@ -17,8 +18,10 @@ import {
   MessageSquare,
   Footprints,
   Check,
+  Search,
 } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import {
   StyleSheet,
@@ -30,7 +33,6 @@ import {
   StatusBar,
   Modal,
   Alert,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -45,6 +47,37 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
     () => goalDirections.map(d => d.id)
   );
   const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
+  const dirIdsRestoredRef = useRef(false);
+  const goalIdRestoredRef = useRef(false);
+
+  useEffect(() => {
+    void AsyncStorage.getItem('strategy_expandedDirectionIds').then(stored => {
+      if (stored) {
+        try {
+          setExpandedDirectionIds(JSON.parse(stored));
+        } catch {}
+      }
+      dirIdsRestoredRef.current = true;
+    });
+    void AsyncStorage.getItem('strategy_expandedGoalId').then(stored => {
+      if (stored !== null) {
+        setExpandedGoalId(stored === '__null__' ? null : stored);
+      }
+      goalIdRestoredRef.current = true;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (dirIdsRestoredRef.current) {
+      void AsyncStorage.setItem('strategy_expandedDirectionIds', JSON.stringify(expandedDirectionIds));
+    }
+  }, [expandedDirectionIds]);
+
+  useEffect(() => {
+    if (goalIdRestoredRef.current) {
+      void AsyncStorage.setItem('strategy_expandedGoalId', expandedGoalId ?? '__null__');
+    }
+  }, [expandedGoalId]);
 
   const { goalId: paramGoalId } = useLocalSearchParams<{ goalId?: string }>();
   const activeGoalId = initialGoalId || paramGoalId;
@@ -67,10 +100,13 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
   const [formTitle, setFormTitle] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formDeadline, setFormDeadline] = useState('');
-  const [formProgress, setFormProgress] = useState('0');
+  const [formPriority, setFormPriority] = useState('5');
   const [formNextStep, setFormNextStep] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formContactIds, setFormContactIds] = useState<string[]>([]);
+  const [contactSearch, setContactSearch] = useState('');
+  const [stepContactSearch, setStepContactSearch] = useState('');
+  const [osintMap, setOsintMap] = useState<Record<string, OsintData | null>>({});
   const [formDirectionId, setFormDirectionId] = useState<string | undefined>(undefined);
 
   const [showDirectionModal, setShowDirectionModal] = useState(false);
@@ -85,6 +121,121 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
   const [stepContent, setStepContent] = useState('');
   const [stepResult, setStepResult] = useState('');
   const [stepContactIds, setStepContactIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAll = async () => {
+      const map: Record<string, OsintData | null> = {};
+      for (const d of dossiers) {
+        try {
+          map[d.contact.id] = await loadOsintData(d.contact.id);
+        } catch {
+          map[d.contact.id] = null;
+        }
+      }
+      if (!cancelled) setOsintMap(map);
+    };
+    loadAll();
+    return () => { cancelled = true; };
+  }, [dossiers.length]);
+
+  const TERM_OPTIONS = ['day', 'week', 'month', 'quarter', 'year'] as const;
+  const getTermLabel = useCallback((term: string) => {
+    const map: Record<string, string> = {
+      day: t.strategy?.termDay ?? 'День',
+      week: t.strategy?.termWeek ?? 'Неделя',
+      month: t.strategy?.termMonth ?? 'Месяц',
+      quarter: t.strategy?.termQuarter ?? 'Квартал',
+      year: t.strategy?.termYear ?? 'Год',
+    };
+    return map[term] ?? term;
+  }, [t]);
+
+  const matchDossierFullText = useCallback((d: ContactDossier, query: string): boolean => {
+    const q = query.toLowerCase();
+    const c = d.contact;
+    if (c.name.toLowerCase().includes(q)) return true;
+    if (c.phoneNumbers?.some(p => p.toLowerCase().includes(q))) return true;
+    if (c.emails?.some(e => e.toLowerCase().includes(q))) return true;
+    if (c.company?.toLowerCase().includes(q)) return true;
+    if (c.position?.toLowerCase().includes(q)) return true;
+    if (c.goal?.toLowerCase().includes(q)) return true;
+    if (c.notes?.toLowerCase().includes(q)) return true;
+    if (c.birthday?.toLowerCase().includes(q)) return true;
+    if (d.powerGrouping?.groupName?.toLowerCase().includes(q)) return true;
+    if (d.sectors?.some(s => s.toLowerCase().includes(q))) return true;
+    if (d.functionalCircle?.toLowerCase().includes(q)) return true;
+    if (d.importance?.toLowerCase().includes(q)) return true;
+    if (d.relationshipLevel?.toLowerCase().includes(q)) return true;
+    if (d.nextAction?.toLowerCase().includes(q)) return true;
+    if (d.relations?.some(r => {
+      const relContact = dossiers.find(dd => dd.contact.id === r.contactId);
+      return relContact?.contact.name.toLowerCase().includes(q);
+    })) return true;
+    if (d.powerGrouping?.vassalIds?.some(vid => {
+      const vassal = dossiers.find(dd => dd.contact.id === vid);
+      return vassal?.contact.name.toLowerCase().includes(q);
+    })) return true;
+    if (d.powerGrouping?.suzerainId) {
+      const suzerain = dossiers.find(dd => dd.contact.id === d.powerGrouping!.suzerainId);
+      if (suzerain?.contact.name.toLowerCase().includes(q)) return true;
+    }
+    if (d.assessment?.impressions?.toLowerCase().includes(q)) return true;
+    const osint = osintMap[d.contact.id];
+    if (osint) {
+      const matchStr = (f?: OsintSourcedField<string>) => f?.value?.toLowerCase().includes(q);
+      const matchArr = (f?: OsintSourcedField<string[]>) => Array.isArray(f?.value) ? f.value.some(v => v.toLowerCase().includes(q)) : typeof f?.value === 'string' ? (f.value as string).toLowerCase().includes(q) : false;
+      const inp = osint.input;
+      if (inp.nicknames?.toLowerCase().includes(q)) return true;
+      if (inp.profileLinks?.toLowerCase().includes(q)) return true;
+      if (inp.interests?.toLowerCase().includes(q)) return true;
+      if (inp.city?.toLowerCase().includes(q)) return true;
+      if (inp.freeformText?.toLowerCase().includes(q)) return true;
+      if (inp.socialParsed) {
+        const sp = inp.socialParsed;
+        if (sp.instagram?.toLowerCase().includes(q)) return true;
+        if (sp.telegram?.toLowerCase().includes(q)) return true;
+        if (sp.vk?.toLowerCase().includes(q)) return true;
+        if (sp.twitter?.toLowerCase().includes(q)) return true;
+        if (sp.linkedin?.toLowerCase().includes(q)) return true;
+      }
+      const a = osint.analysis;
+      if (a) {
+        if (matchStr(a.facts.contacts)) return true;
+        if (matchStr(a.facts.home)) return true;
+        if (matchStr(a.facts.work)) return true;
+        if (matchStr(a.facts.family)) return true;
+        if (matchArr(a.facts.hobbies)) return true;
+        if (matchArr(a.facts.friends)) return true;
+        if (matchArr(a.facts.enemies)) return true;
+        if (matchArr(a.facts.assets)) return true;
+        if (matchArr(a.facts.debts)) return true;
+        if (matchStr(a.traits.relationshipHistory)) return true;
+        if (matchStr(a.traits.honesty)) return true;
+        if (matchStr(a.traits.helpfulness)) return true;
+        if (matchStr(a.traits.emotionalStability)) return true;
+        if (matchArr(a.motivation.goals)) return true;
+        if (matchArr(a.motivation.fears)) return true;
+        if (matchArr(a.motivation.dreams)) return true;
+        if (matchStr(a.motivation.politicalViews)) return true;
+        if (matchStr(a.aiSummary.profile)) return true;
+        if (matchStr(a.aiSummary.behaviorPrediction)) return true;
+        if (matchArr(a.aiSummary.risks)) return true;
+        if (matchArr(a.aiSummary.opportunities)) return true;
+      }
+    }
+    return false;
+  }, [dossiers, osintMap]);
+
+  const filteredDossiers = useMemo(() => {
+    if (!contactSearch.trim()) return dossiers;
+    return dossiers.filter(d => matchDossierFullText(d, contactSearch));
+  }, [dossiers, contactSearch, matchDossierFullText]);
+
+  const filteredStepDossiers = useMemo(() => {
+    if (!stepContactSearch.trim()) return dossiers;
+    return dossiers.filter(d => matchDossierFullText(d, stepContactSearch));
+  }, [dossiers, stepContactSearch, matchDossierFullText]);
 
   const styles = createStyles(theme);
 
@@ -121,11 +272,12 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
     setFormTitle('');
     setFormDesc('');
     setFormDeadline('');
-    setFormProgress('0');
+    setFormPriority('5');
     setFormNextStep('');
     setFormNotes('');
     setFormContactIds([]);
     setFormDirectionId(directionId);
+    setContactSearch('');
     if (directionId) {
       setExpandedDirectionIds(prev =>
         prev.includes(directionId) ? prev : [...prev, directionId]
@@ -140,11 +292,12 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
     setFormTitle(goal.title);
     setFormDesc(goal.description);
     setFormDeadline(goal.deadline);
-    setFormProgress(String(goal.progress));
+    setFormPriority(String(goal.priority));
     setFormNextStep(goal.nextStep);
     setFormNotes(goal.notes);
     setFormContactIds(goal.contactIds);
     setFormDirectionId(goal.directionId);
+    setContactSearch('');
   }, []);
 
   const closeGoalForm = useCallback(() => {
@@ -158,14 +311,14 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
       Alert.alert(t.common.error, t.strategy?.enterTitle ?? 'Enter a title');
       return;
     }
-    const progress = Math.min(100, Math.max(0, parseInt(formProgress, 10) || 0));
+    const priority = Math.min(10, Math.max(1, parseInt(formPriority, 10) || 5));
 
     if (editingGoalId) {
       updateGoal(editingGoalId, {
         title,
         description: formDesc,
         deadline: formDeadline,
-        progress,
+        priority,
         nextStep: formNextStep,
         notes: formNotes,
         contactIds: formContactIds,
@@ -177,7 +330,7 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
         title,
         description: formDesc,
         deadline: formDeadline,
-        progress,
+        priority,
         nextStep: formNextStep,
         notes: formNotes,
         contactIds: formContactIds,
@@ -187,7 +340,7 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
       addGoal(newGoal);
     }
     closeGoalForm();
-  }, [editingGoalId, formTitle, formDesc, formDeadline, formProgress, formNextStep, formNotes, formContactIds, formDirectionId, addGoal, updateGoal, closeGoalForm, t]);
+  }, [editingGoalId, formTitle, formDesc, formDeadline, formPriority, formNextStep, formNotes, formContactIds, formDirectionId, addGoal, updateGoal, closeGoalForm, t]);
 
   const handleDeleteGoal = useCallback((id: string) => {
     Alert.alert(
@@ -237,6 +390,7 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
     setStepContent('');
     setStepResult('');
     setStepContactIds([]);
+    setStepContactSearch('');
   }, []);
 
   const openEditStepInline = useCallback((goalId: string, step: GoalStep) => {
@@ -247,6 +401,7 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
     setStepContent(step.content);
     setStepResult(step.result);
     setStepContactIds(step.contactIds);
+    setStepContactSearch('');
   }, []);
 
   const closeStepForm = useCallback(() => {
@@ -438,10 +593,37 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
     reorderGoalDirections(reordered);
   }, [sortedDirections, reorderGoalDirections]);
 
-  const getProgressColor = (progress: number) => {
-    if (progress >= 75) return theme.success;
-    if (progress >= 40) return theme.warning;
-    return theme.danger;
+  const getPriorityColor = (priority: number) => {
+    if (priority >= 8) return theme.danger;
+    if (priority >= 5) return theme.warning;
+    return theme.success;
+  };
+
+  const renderPriorityDots = (priority: number, size: number = 8, onSelect?: (value: number) => void) => {
+    const color = getPriorityColor(priority);
+    return (
+      <View style={styles.priorityDotsRow}>
+        {Array.from({ length: 10 }, (_, i) => (
+          <TouchableOpacity
+            key={i}
+            activeOpacity={onSelect ? 0.6 : 1}
+            onPress={onSelect ? () => onSelect(i + 1) : undefined}
+            disabled={!onSelect}
+            hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+          >
+            <View
+              style={[
+                styles.priorityDot,
+                { width: size, height: size, borderRadius: size / 2 },
+                i < priority
+                  ? { backgroundColor: color }
+                  : { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.border },
+              ]}
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
   };
 
   const renderInlineGoalCreateForm = () => (
@@ -517,33 +699,49 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
 
       <View style={[styles.formRow, { gap: 8 }]}>
         <View style={[styles.inlineField, { flex: 1 }]}>
-          <Text style={styles.fieldLabel}>{t.strategy?.progress ?? 'PROGRESS'} %</Text>
-          <TextInput
-            style={styles.inlineInput}
-            value={formProgress}
-            onChangeText={setFormProgress}
-            keyboardType="numeric"
-            placeholder="0"
-            placeholderTextColor={theme.primaryDim}
-          />
+          <Text style={styles.fieldLabel}>{t.strategy?.priority ?? 'PRIORITY'}</Text>
+          <View style={styles.priorityDotsInput}>
+            {renderPriorityDots(parseInt(formPriority, 10) || 5, 10, (val) => setFormPriority(String(val)))}
+          </View>
         </View>
         <View style={[styles.inlineField, { flex: 1 }]}>
-          <Text style={styles.fieldLabel}>{t.strategy?.deadline ?? 'DEADLINE'}</Text>
-          <TextInput
-            style={styles.inlineInput}
-            value={formDeadline}
-            onChangeText={setFormDeadline}
-            placeholder="2026-06-01"
-            placeholderTextColor={theme.primaryDim}
-          />
+          <Text style={styles.fieldLabel}>{t.strategy?.deadline ?? 'СРОК'}</Text>
+          <View style={styles.termPicker}>
+            {TERM_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt}
+                style={[
+                  styles.termPickerItem,
+                  formDeadline === opt && styles.termPickerItemActive,
+                ]}
+                onPress={() => setFormDeadline(formDeadline === opt ? '' : opt)}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.termPickerText,
+                  formDeadline === opt && styles.termPickerTextActive,
+                ]}>{getTermLabel(opt)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </View>
 
       {dossiers.length > 0 && (
         <View style={styles.inlineField}>
           <Text style={styles.fieldLabel}>{t.strategy?.keyContacts ?? 'KEY CONTACTS'}</Text>
-          <View style={styles.inlineContactPicker}>
-            {dossiers.map(d => {
+          <View style={styles.contactSearchRow}>
+            <Search size={14} color={theme.primaryDim} />
+            <TextInput
+              style={styles.contactSearchInput}
+              value={contactSearch}
+              onChangeText={setContactSearch}
+              placeholder={t.strategy?.searchContacts ?? 'Поиск...'}
+              placeholderTextColor={theme.primaryDim}
+            />
+          </View>
+          <ScrollView style={styles.inlineContactPicker} contentContainerStyle={styles.inlineContactPickerContent} nestedScrollEnabled>
+            {filteredDossiers.map(d => {
               const isSelected = formContactIds.includes(d.contact.id);
               return (
                 <TouchableOpacity
@@ -566,7 +764,7 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </ScrollView>
         </View>
       )}
 
@@ -584,7 +782,7 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
   const renderGoal = (goal: StrategicGoal) => {
     const isExpanded = expandedGoalId === goal.id;
     const linkedContacts = dossiers.filter(d => goal.contactIds.includes(d.contact.id));
-    const progressColor = getProgressColor(goal.progress);
+    const priorityColor = getPriorityColor(goal.priority);
 
     return (
       <View key={goal.id} style={styles.goalCard}>
@@ -599,22 +797,13 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
             {goal.description ? (
               <Text style={styles.goalDesc} numberOfLines={1}>{goal.description}</Text>
             ) : null}
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <Animated.View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${goal.progress}%` as any,
-                      backgroundColor: progressColor,
-                    },
-                  ]}
-                />
-              </View>
-              <Text style={[styles.progressText, { color: progressColor }]}>
-                {goal.progress}%
-                {goal.deadline ? ` · ${goal.deadline}` : ''}
-              </Text>
+            <View style={styles.priorityContainer}>
+              {renderPriorityDots(goal.priority)}
+              {goal.deadline ? (
+                <Text style={styles.deadlineText}>
+                  {t.strategy?.deadline ?? 'СРОК'}: {getTermLabel(goal.deadline)}
+                </Text>
+              ) : null}
             </View>
           </View>
           {isExpanded ? (
@@ -728,8 +917,18 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
                         {dossiers.length > 0 && (
                           <View style={styles.inlineField}>
                             <Text style={styles.fieldLabel}>{t.strategy?.stepContacts ?? 'STEP CONTACTS'}</Text>
-                            <View style={styles.inlineContactPicker}>
-                              {dossiers.map(d => {
+                            <View style={styles.contactSearchRow}>
+                              <Search size={14} color={theme.primaryDim} />
+                              <TextInput
+                                style={styles.contactSearchInput}
+                                value={stepContactSearch}
+                                onChangeText={setStepContactSearch}
+                                placeholder={t.strategy?.searchContacts ?? 'Поиск...'}
+                                placeholderTextColor={theme.primaryDim}
+                              />
+                            </View>
+                            <ScrollView style={styles.inlineContactPicker} contentContainerStyle={styles.inlineContactPickerContent} nestedScrollEnabled>
+                              {filteredStepDossiers.map(d => {
                                 const isSelected = stepContactIds.includes(d.contact.id);
                                 return (
                                   <TouchableOpacity
@@ -752,7 +951,7 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
                                   </TouchableOpacity>
                                 );
                               })}
-                            </View>
+                            </ScrollView>
                           </View>
                         )}
                         <View style={[styles.formRow, { marginTop: 6 }]}>
@@ -900,8 +1099,18 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
                   {dossiers.length > 0 && (
                     <View style={styles.inlineField}>
                       <Text style={styles.fieldLabel}>{t.strategy?.stepContacts ?? 'STEP CONTACTS'}</Text>
-                      <View style={styles.inlineContactPicker}>
-                        {dossiers.map(d => {
+                      <View style={styles.contactSearchRow}>
+                        <Search size={14} color={theme.primaryDim} />
+                        <TextInput
+                          style={styles.contactSearchInput}
+                          value={stepContactSearch}
+                          onChangeText={setStepContactSearch}
+                          placeholder={t.strategy?.searchContacts ?? 'Поиск...'}
+                          placeholderTextColor={theme.primaryDim}
+                        />
+                      </View>
+                      <ScrollView style={styles.inlineContactPicker} contentContainerStyle={styles.inlineContactPickerContent} nestedScrollEnabled>
+                        {filteredStepDossiers.map(d => {
                           const isSelected = stepContactIds.includes(d.contact.id);
                           return (
                             <TouchableOpacity
@@ -924,7 +1133,7 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
                             </TouchableOpacity>
                           );
                         })}
-                      </View>
+                      </ScrollView>
                     </View>
                   )}
 
@@ -1028,33 +1237,49 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
 
             <View style={[styles.formRow, { gap: 8 }]}>
               <View style={[styles.inlineField, { flex: 1 }]}>
-                <Text style={styles.fieldLabel}>{t.strategy?.progress ?? 'PROGRESS'} %</Text>
-                <TextInput
-                  style={styles.inlineInput}
-                  value={formProgress}
-                  onChangeText={setFormProgress}
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor={theme.primaryDim}
-                />
+                <Text style={styles.fieldLabel}>{t.strategy?.priority ?? 'PRIORITY'}</Text>
+                <View style={styles.priorityDotsInput}>
+                  {renderPriorityDots(parseInt(formPriority, 10) || 5, 10, (val) => setFormPriority(String(val)))}
+                </View>
               </View>
               <View style={[styles.inlineField, { flex: 1 }]}>
-                <Text style={styles.fieldLabel}>{t.strategy?.deadline ?? 'DEADLINE'}</Text>
-                <TextInput
-                  style={styles.inlineInput}
-                  value={formDeadline}
-                  onChangeText={setFormDeadline}
-                  placeholder="2026-06-01"
-                  placeholderTextColor={theme.primaryDim}
-                />
+                <Text style={styles.fieldLabel}>{t.strategy?.deadline ?? 'СРОК'}</Text>
+                <View style={styles.termPicker}>
+                  {TERM_OPTIONS.map(opt => (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[
+                        styles.termPickerItem,
+                        formDeadline === opt && styles.termPickerItemActive,
+                      ]}
+                      onPress={() => setFormDeadline(formDeadline === opt ? '' : opt)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[
+                        styles.termPickerText,
+                        formDeadline === opt && styles.termPickerTextActive,
+                      ]}>{getTermLabel(opt)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
             </View>
 
             {dossiers.length > 0 && (
               <View style={styles.inlineField}>
                 <Text style={styles.fieldLabel}>{t.strategy?.keyContacts ?? 'KEY CONTACTS'}</Text>
-                <View style={styles.inlineContactPicker}>
-                  {dossiers.map(d => {
+                <View style={styles.contactSearchRow}>
+                  <Search size={14} color={theme.primaryDim} />
+                  <TextInput
+                    style={styles.contactSearchInput}
+                    value={contactSearch}
+                    onChangeText={setContactSearch}
+                    placeholder={t.strategy?.searchContacts ?? 'Поиск...'}
+                    placeholderTextColor={theme.primaryDim}
+                  />
+                </View>
+                <ScrollView style={styles.inlineContactPicker} contentContainerStyle={styles.inlineContactPickerContent} nestedScrollEnabled>
+                  {filteredDossiers.map(d => {
                     const isSelected = formContactIds.includes(d.contact.id);
                     return (
                       <TouchableOpacity
@@ -1077,7 +1302,7 @@ export default function StrategyScreen({ initialGoalId }: { initialGoalId?: stri
                       </TouchableOpacity>
                     );
                   })}
-                </View>
+                </ScrollView>
               </View>
             )}
 
@@ -1438,18 +1663,71 @@ const createStyles = (theme: any) =>
       fontFamily: 'monospace' as const,
       marginTop: 4,
     },
-    progressContainer: { marginTop: 8 },
-    progressBar: {
-      height: 5,
-      backgroundColor: theme.border,
-      borderRadius: 3,
-      overflow: 'hidden',
+    priorityContainer: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 8,
+      marginTop: 8,
+      flexWrap: 'wrap' as const,
     },
-    progressFill: { height: '100%', borderRadius: 3 },
-    progressText: {
+    priorityDotsRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 3,
+    },
+    priorityDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    priorityDotsInput: {
+      paddingVertical: 8,
+    },
+    termPicker: {
+      flexDirection: 'row' as const,
+      flexWrap: 'wrap' as const,
+      gap: 4,
+    },
+    termPickerItem: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+    },
+    termPickerItemActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.overlay,
+    },
+    termPickerText: {
       fontSize: 10,
+      color: theme.textSecondary,
       fontFamily: 'monospace' as const,
-      marginTop: 4,
+    },
+    termPickerTextActive: {
+      color: theme.primary,
+      fontWeight: '600' as const,
+    },
+    contactSearchRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: 8,
+      marginBottom: 4,
+      gap: 6,
+    },
+    contactSearchInput: {
+      flex: 1,
+      paddingVertical: 6,
+      fontSize: 12,
+      color: theme.text,
+      fontFamily: 'monospace' as const,
+    },
+    deadlineText: {
+      fontSize: 10,
+      color: theme.textSecondary,
+      fontFamily: 'monospace' as const,
       letterSpacing: 1,
     },
     goalDetail: {
@@ -1812,7 +2090,10 @@ const createStyles = (theme: any) =>
       borderWidth: 1,
       borderColor: theme.border,
       padding: 6,
-      maxHeight: 120,
+      maxHeight: 150,
+    },
+    inlineContactPickerContent: {
+      flexGrow: 0,
     },
     inlineContactItem: {
       flexDirection: 'row',

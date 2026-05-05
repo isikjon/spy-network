@@ -45,6 +45,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import type { ContactAssessment, ContactRelation, DiaryEntry, FunctionalCircle, ImportanceLevel, RelationshipLevel, Sector } from '@/types';
+import { OsintBlock } from '@/components/OsintBlock';
 import { Star } from 'lucide-react-native';
 
 export type DossierPaneProps = {
@@ -89,6 +90,7 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
   const [editCircle, setEditCircle] = useState<FunctionalCircle>('support');
   const [editImportance, setEditImportance] = useState<ImportanceLevel>('medium');
   const [editPhoto, setEditPhoto] = useState<string | undefined>(undefined);
+  const [editBirthday, setEditBirthday] = useState<string>('');
   const [editRelations, setEditRelations] = useState<ContactRelation[]>([]);
   const [editNoDirectConnection, setEditNoDirectConnection] = useState<boolean>(false);
   const [editRelationshipLevel, setEditRelationshipLevel] = useState<RelationshipLevel | undefined>(undefined);
@@ -128,6 +130,12 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
   useEffect(() => {
     setIsEditing(!!initialEdit);
   }, [initialEdit]);
+
+  const allContactNamesMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    dossiers.forEach(d => { map[d.contact.id] = d.contact.name; });
+    return map;
+  }, [dossiers]);
 
   const sectors: Sector[] = useMemo(() => userSectors as Sector[], [userSectors]);
   const circles: FunctionalCircle[] = useMemo(() => ['support', 'productivity', 'development'], []);
@@ -169,6 +177,7 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
     setEditCircle(dossier.functionalCircle);
     setEditImportance(dossier.importance);
     setEditPhoto(dossier.contact.photo);
+    setEditBirthday(dossier.contact.birthday || '');
     setEditRelations(dossier.relations || []);
     setEditNoDirectConnection(dossier.noDirectConnection ?? false);
     setEditRelationshipLevel(dossier.relationshipLevel);
@@ -190,7 +199,7 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
         name: editName,
         position: editPosition || undefined,
         company: editCompany || undefined,
-
+        birthday: editBirthday || undefined,
         phoneNumbers: editPhones.filter((p) => p.trim()),
         emails: editEmails.filter((e) => e.trim()),
         photo: editPhoto,
@@ -209,7 +218,7 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
           }
         : undefined,
     });
-  }, [dossierId, editCircle, editCompany, editEmails, editImportance, editName, editNoDirectConnection, editRelationshipLevel, editPhones, editPhoto, editPowerGroupName, editRelations, editSectors, editPosition, editSuzerainId, editVassalIds, updateDossier]);
+  }, [dossierId, editBirthday, editCircle, editCompany, editEmails, editImportance, editName, editNoDirectConnection, editRelationshipLevel, editPhones, editPhoto, editPowerGroupName, editRelations, editSectors, editPosition, editSuzerainId, editVassalIds, updateDossier]);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -401,9 +410,37 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
     ]);
   }, [deleteDossier, dossier, dossierId, onBack, t.contact.cancel, t.contact.delete, t.contact.deleteDossier, t.contact.removeDossierMessage]);
 
+  const pickImageWeb = useCallback(() => {
+    return new Promise<string | null>((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = (e: Event) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) { resolve(null); return; }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    });
+  }, []);
+
   const pickImage = useCallback(async () => {
     if (Platform.OS === 'web') {
-      Alert.alert(t.contact.notAvailable, t.contact.imagePickerNotWeb);
+      try {
+        const dataUrl = await pickImageWeb();
+        if (!dataUrl) return;
+        setEditPhoto(dataUrl);
+        if (dossier) {
+          updateDossier(dossierId, {
+            contact: { ...dossier.contact, photo: dataUrl },
+          });
+        }
+      } catch (e) {
+        console.log('[DossierPane] pickImage web error', e);
+      }
       return;
     }
 
@@ -436,7 +473,7 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
         });
       }
     }
-  }, [dossier, dossierId, t.contact.cameraRollPermission, t.contact.imagePickerNotWeb, t.contact.notAvailable, t.contact.permissionRequired, updateDossier]);
+  }, [dossier, dossierId, pickImageWeb, t.contact.cameraRollPermission, t.contact.permissionRequired, updateDossier]);
 
   const removePhoto = useCallback(() => {
     Alert.alert(t.contact.removePhoto, t.contact.removeContactPhoto, [
@@ -567,6 +604,25 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
     },
     [dossiers, dossierId, editVassalIds, updateDossier]
   );
+
+  const updateReciprocalStrength = useCallback((targetContactId: string, newStrength: number) => {
+    const targetDossier = dossiers.find((d) => d.contact.id === targetContactId);
+    if (!targetDossier) return;
+    const reciprocal = targetDossier.relations.find((r) => r.contactId === dossierId);
+    if (reciprocal) {
+      const updatedRelations = targetDossier.relations.map((r) =>
+        r.contactId === dossierId ? { ...r, strength: newStrength } : r
+      );
+      updateDossier(targetContactId, { relations: updatedRelations });
+    }
+  }, [dossiers, dossierId, updateDossier]);
+
+  const removeReciprocalRelation = useCallback((targetContactId: string) => {
+    const targetDossier = dossiers.find((d) => d.contact.id === targetContactId);
+    if (!targetDossier) return;
+    const updatedRelations = targetDossier.relations.filter((r) => r.contactId !== dossierId);
+    updateDossier(targetContactId, { relations: updatedRelations });
+  }, [dossiers, dossierId, updateDossier]);
 
   const handleAddNewGroupName = useCallback(() => {
     const next = newGroupName.trim();
@@ -932,6 +988,25 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
                     placeholder={t.contact.optional}
                     testID="dossierEditCompany"
                   />
+                  <Text style={styles.editLabel}>{(t.contact as any).birthday ?? 'BIRTHDAY'}</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editBirthday}
+                    onChangeText={(text) => {
+                      const cleaned = text.replace(/[^0-9.]/g, '');
+                      let formatted = cleaned;
+                      const prev = editBirthday;
+                      if (cleaned.length === 2 && prev.length < 2) formatted = cleaned + '.';
+                      else if (cleaned.length === 5 && prev.length < 5 && cleaned[2] === '.') formatted = cleaned + '.';
+                      if (formatted.length > 10) formatted = formatted.slice(0, 10);
+                      setEditBirthday(formatted);
+                    }}
+                    placeholderTextColor={theme.primaryDim}
+                    placeholder={(t.contact as any).birthdayPlaceholder ?? 'DD.MM.YYYY'}
+                    keyboardType="numeric"
+                    maxLength={10}
+                    testID="dossierEditBirthday"
+                  />
 
                 </>
               ) : (
@@ -955,6 +1030,11 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
                     </View>
                   ) : null}
                   {dossier.contact.company ? <Text style={styles.company}>{dossier.contact.company}</Text> : null}
+                  {dossier.contact.birthday ? (
+                    <View style={styles.metaRow}>
+                      <Text style={styles.metaText}>{(t.contact as any).birthday ?? 'BIRTHDAY'}: {dossier.contact.birthday}</Text>
+                    </View>
+                  ) : null}
                   {dossier.noDirectConnection && (
                     <View style={styles.noConnectionBadge}>
                       <Text style={styles.noConnectionText}>{t.contact.noDirectConnection}</Text>
@@ -1072,8 +1152,23 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
                               <View style={styles.goalCardContent}>
                                 <View style={styles.goalCardTop}>
                                   <Text style={styles.goalCardTitle} numberOfLines={1}>{g.title}</Text>
-                                  {g.progress > 0 ? (
-                                    <Text style={styles.goalCardProgress}>{g.progress}%</Text>
+                                  {g.priority > 0 ? (
+                                    <View style={styles.goalCardDotsRow}>
+                                      {Array.from({ length: 10 }, (_, i) => {
+                                        const dotColor = g.priority >= 8 ? theme.danger : g.priority >= 5 ? (theme.warning ?? '#f59e0b') : (theme.success ?? '#10b981');
+                                        return (
+                                          <View
+                                            key={i}
+                                            style={[
+                                              styles.goalCardDot,
+                                              i < g.priority
+                                                ? { backgroundColor: dotColor }
+                                                : { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.border },
+                                            ]}
+                                          />
+                                        );
+                                      })}
+                                    </View>
                                   ) : null}
                                 </View>
                                 {g.description ? (
@@ -1456,6 +1551,14 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
               )}
             </View>
 
+            <OsintBlock
+              contactId={dossierId}
+              contact={dossier.contact}
+              relations={dossier.relations}
+              powerGrouping={dossier.powerGrouping}
+              allContactNames={allContactNamesMap}
+            />
+
             <View style={styles.section} testID="dossierConnections">
               <TouchableOpacity
                 style={styles.collapsibleHeader}
@@ -1501,7 +1604,11 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
                           </Text>
                           <TouchableOpacity
                             onPress={() => {
+                              const removedRelation = editRelations[idx];
                               setEditRelations(editRelations.filter((_, i) => i !== idx));
+                              if (removedRelation) {
+                                removeReciprocalRelation(removedRelation.contactId);
+                              }
                             }}
                             activeOpacity={0.7}
                             testID={`dossierRelationRemove_${idx}`}
@@ -1513,12 +1620,14 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
                           <Text style={styles.strengthLabel}>{t.contact.strength}</Text>
                           <TouchableOpacity
                             onPress={() => {
+                              const newStrength = Math.max(1, editRelations[idx].strength - 1);
                               const newRelations = [...editRelations];
                               newRelations[idx] = {
                                 ...newRelations[idx],
-                                strength: Math.max(1, newRelations[idx].strength - 1),
+                                strength: newStrength,
                               };
                               setEditRelations(newRelations);
+                              updateReciprocalStrength(relation.contactId, newStrength);
                             }}
                             activeOpacity={0.7}
                             disabled={relation.strength <= 1}
@@ -1532,12 +1641,14 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
                           <Text style={styles.strengthValue}>{relation.strength}/10</Text>
                           <TouchableOpacity
                             onPress={() => {
+                              const newStrength = Math.min(10, editRelations[idx].strength + 1);
                               const newRelations = [...editRelations];
                               newRelations[idx] = {
                                 ...newRelations[idx],
-                                strength: Math.min(10, newRelations[idx].strength + 1),
+                                strength: newStrength,
                               };
                               setEditRelations(newRelations);
+                              updateReciprocalStrength(relation.contactId, newStrength);
                             }}
                             activeOpacity={0.7}
                             disabled={relation.strength >= 10}
@@ -2091,6 +2202,7 @@ export function DossierPane({ dossierId, initialEdit, onBack, onOpenNetwork: _on
                 </View>
               )}
             </View>
+
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -2791,6 +2903,17 @@ const createStyles = (theme: any) =>
       fontFamily: 'monospace' as const,
       fontWeight: '700' as const,
       marginLeft: 8,
+    },
+    goalCardDotsRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 2,
+      marginLeft: 8,
+    },
+    goalCardDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
     },
     goalCardDescription: {
       fontSize: 11,

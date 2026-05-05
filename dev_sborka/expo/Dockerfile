@@ -9,7 +9,7 @@ RUN npm install --legacy-peer-deps
 COPY . .
 
 # 1) Собираем Expo web → dist/
-RUN EXPO_PUBLIC_RORK_API_BASE_URL=https://spynetwork.ru \
+RUN EXPO_PUBLIC_RORK_API_BASE_URL=https://spynetwork.ru/devsborka \
     npx expo export --platform web --output-dir dist
 
 # 2) Компилируем TypeScript бэкенда

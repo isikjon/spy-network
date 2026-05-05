@@ -41,8 +41,8 @@ function paymentKey(paymentId: string): string {
   return `payment:${paymentId}`;
 }
 
-function cardKey(phone: string): string {
-  return `user:${phone}:payment_method`;
+function cardKey(identifier: string): string {
+  return `user:${identifier}:payment_method`;
 }
 
 function getYooKassaCredentials(): { shopId: string; secretKey: string } | null {
@@ -194,7 +194,7 @@ export const paymentRouter = createTRPCRouter({
    * Создать платёж. Возвращает URL для редиректа на страницу оплаты.
    */
   createPayment: publicProcedure.mutation(async ({ ctx }) => {
-    if (!ctx.userPhone) {
+    if (!ctx.userPhone || !ctx.userUid) {
       return { ok: false as const, error: "UNAUTHENTICATED" as const };
     }
 
@@ -213,12 +213,12 @@ export const paymentRouter = createTRPCRouter({
 
     await storeSet(paymentKey(result.paymentId), {
       paymentId: result.paymentId,
-      phone: ctx.userPhone,
+      phone: ctx.userUid,
       status: "pending",
       createdAt: Date.now(),
     } as PendingPayment);
 
-    console.log("[payment] created", { phone: ctx.userPhone, paymentId: result.paymentId });
+    console.log("[payment] created", { uid: ctx.userUid, paymentId: result.paymentId });
 
     return {
       ok: true as const,
@@ -233,11 +233,11 @@ export const paymentRouter = createTRPCRouter({
   checkPayment: publicProcedure
     .input(z.object({ paymentId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      if (!ctx.userPhone) {
+      if (!ctx.userUid) {
         return { ok: false as const, error: "UNAUTHENTICATED" as const };
       }
       const record = await storeGet<PendingPayment>(paymentKey(input.paymentId));
-      if (!record || record.phone !== ctx.userPhone) {
+      if (!record || record.phone !== ctx.userUid) {
         return { ok: false as const, error: "NOT_FOUND" as const };
       }
       return { ok: true as const, status: record.status };
@@ -247,11 +247,11 @@ export const paymentRouter = createTRPCRouter({
    * Получить информацию о сохранённой карте.
    */
   getCardInfo: publicProcedure.query(async ({ ctx }) => {
-    if (!ctx.userPhone) {
+    if (!ctx.userUid) {
       return { ok: false as const, error: "UNAUTHENTICATED" as const };
     }
-    const card = await storeGet<SavedCard>(cardKey(ctx.userPhone));
-    const levelData = await getUserLevel(ctx.userPhone);
+    const card = await storeGet<SavedCard>(cardKey(ctx.userUid));
+    const levelData = await getUserLevel(ctx.userUid);
     return {
       ok: true as const,
       card: card ?? null,
@@ -263,11 +263,11 @@ export const paymentRouter = createTRPCRouter({
    * Отвязать карту (удалить сохранённый payment method).
    */
   deleteCard: publicProcedure.mutation(async ({ ctx }) => {
-    if (!ctx.userPhone) {
+    if (!ctx.userUid) {
       return { ok: false as const, error: "UNAUTHENTICATED" as const };
     }
-    await storeDelete(cardKey(ctx.userPhone));
-    console.log("[payment] card deleted for", ctx.userPhone);
+    await storeDelete(cardKey(ctx.userUid));
+    console.log("[payment] card deleted for uid", ctx.userUid);
     return { ok: true as const };
   }),
 });

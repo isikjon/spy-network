@@ -18,6 +18,8 @@ import {
   Crown,
   Brain,
   PenTool,
+  Plus,
+  UserPlus,
 } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -29,6 +31,7 @@ import {
   TouchableOpacity,
   View,
   FlatList,
+  ScrollView,
   StatusBar,
   Modal,
   Alert,
@@ -48,6 +51,19 @@ import ActionsScreen from './actions';
 import ClubScreen from './club';
 
 type OpenDossierHandler = (payload: { id: string; edit?: boolean }) => void;
+
+function formatContactBirthday(birthday: any): string | undefined {
+  if (!birthday) return undefined;
+  const day = birthday.day;
+  const month = birthday.month !== undefined ? birthday.month + 1 : undefined;
+  const year = birthday.year;
+  if (day && month) {
+    const dd = String(day).padStart(2, '0');
+    const mm = String(month).padStart(2, '0');
+    return year ? `${dd}.${mm}.${year}` : `${dd}.${mm}`;
+  }
+  return undefined;
+}
 
 function getMaintenanceInfoForDossier(dossier: ContactDossier): { status: 'green' | 'yellow' | 'red' | 'inactive'; daysLeft: number; recommendedDays: number } | null {
   if (dossier.noDirectConnection) {
@@ -106,31 +122,143 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
   const [phoneContacts, setPhoneContacts] = useState<any[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualCompany, setManualCompany] = useState('');
+  const [manualPosition, setManualPosition] = useState('');
 
   const styles = createStyles(theme);
 
-  const filteredDossiers = dossiers.filter((d) => {
-    if (!search) return true;
-    
-    const searchLower = search.toLowerCase();
-    
-    return (
-      d.contact.name.toLowerCase().includes(searchLower) ||
-      d.contact.phoneNumbers.some(p => p.toLowerCase().includes(searchLower)) ||
-      d.contact.emails.some(e => e.toLowerCase().includes(searchLower)) ||
-      (d.contact.company && d.contact.company.toLowerCase().includes(searchLower)) ||
-      (d.contact.position && d.contact.position.toLowerCase().includes(searchLower)) ||
-      (d.contact.notes && d.contact.notes.toLowerCase().includes(searchLower)) ||
-      d.sectors.some(s => s.toLowerCase().includes(searchLower)) ||
-      d.functionalCircle.toLowerCase().includes(searchLower) ||
-      d.importance.toLowerCase().includes(searchLower) ||
-      d.diary.some(entry => entry.content.toLowerCase().includes(searchLower))
-    );
-  });
+  const getConnectionCount = useCallback((d: ContactDossier) => {
+    const directRelations = d.relations?.length ?? 0;
+    const incomingRelations = dossiers.filter(
+      (other) => other.contact.id !== d.contact.id && (other.relations ?? []).some((r) => r.contactId === d.contact.id)
+    ).length;
+    return directRelations + incomingRelations;
+  }, [dossiers]);
+
+  const filteredDossiers = useMemo(() => {
+    const filtered = dossiers.filter((d) => {
+      if (!search) return true;
+      const searchLower = search.toLowerCase();
+      return (
+        d.contact.name.toLowerCase().includes(searchLower) ||
+        d.contact.phoneNumbers.some(p => p.toLowerCase().includes(searchLower)) ||
+        d.contact.emails.some(e => e.toLowerCase().includes(searchLower)) ||
+        (d.contact.company && d.contact.company.toLowerCase().includes(searchLower)) ||
+        (d.contact.position && d.contact.position.toLowerCase().includes(searchLower)) ||
+        (d.contact.notes && d.contact.notes.toLowerCase().includes(searchLower)) ||
+        d.sectors.some(s => s.toLowerCase().includes(searchLower)) ||
+        d.functionalCircle.toLowerCase().includes(searchLower) ||
+        d.importance.toLowerCase().includes(searchLower) ||
+        d.diary.some(entry => entry.content.toLowerCase().includes(searchLower))
+      );
+    });
+    return [...filtered].sort((a, b) => getConnectionCount(b) - getConnectionCount(a));
+  }, [dossiers, search, getConnectionCount]);
+
+  const openManualCreate = useCallback(() => {
+    setManualName('');
+    setManualPhone('');
+    setManualEmail('');
+    setManualCompany('');
+    setManualPosition('');
+    setShowManualModal(true);
+  }, []);
+
+  const handleManualCreate = useCallback(() => {
+    if (!manualName.trim()) {
+      Alert.alert(t.dossiers.error, t.dossiers.nameRequired);
+      return;
+    }
+    const newDossier: ContactDossier = {
+      contact: {
+        id: `contact_${Date.now()}`,
+        name: manualName.trim(),
+        phoneNumbers: manualPhone.trim() ? [manualPhone.trim()] : [],
+        emails: manualEmail.trim() ? [manualEmail.trim()] : [],
+        company: manualCompany.trim() || undefined,
+        position: manualPosition.trim() || undefined,
+      },
+      sectors: [],
+      functionalCircle: 'productivity',
+      importance: 'medium',
+      relations: [],
+      diary: [
+        {
+          id: `diary_${Date.now()}`,
+          date: new Date(),
+          type: 'auto',
+          content: t.dossiers.contactAddedToNetwork,
+        },
+      ],
+      addedDate: new Date(),
+    };
+    const result = addDossier(newDossier);
+    if (!result.ok && result.error === 'DUPLICATE') {
+      setShowManualModal(false);
+      Alert.alert(
+        t.dossiers.duplicateTitle || 'Контакт уже существует',
+        (t.dossiers.duplicateMessage || 'Контакт с таким номером уже есть в досье:') + ` "${result.existingName}"`,
+        [
+          { text: t.dossiers.cancel || 'Отмена', style: 'cancel' },
+          {
+            text: t.dossiers.openExisting || 'Открыть',
+            onPress: () => {
+              if (onOpenDossier) {
+                onOpenDossier({ id: result.existingId });
+              } else {
+                router.push({ pathname: '/dossier/[id]' as any, params: { id: result.existingId } });
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+    setShowManualModal(false);
+    if (onOpenDossier) {
+      onOpenDossier({ id: newDossier.contact.id, edit: true });
+    } else {
+      router.push({ pathname: '/dossier/[id]' as any, params: { id: newDossier.contact.id, edit: 'true' } });
+    }
+  }, [manualName, manualPhone, manualEmail, manualCompany, manualPosition, addDossier, t.dossiers, onOpenDossier]);
+
+  const createAndOpenDossier = useCallback(() => {
+    const newDossier: ContactDossier = {
+      contact: {
+        id: `contact_${Date.now()}`,
+        name: '',
+        phoneNumbers: [],
+        emails: [],
+      },
+      sectors: [],
+      functionalCircle: 'productivity',
+      importance: 'medium',
+      relations: [],
+      diary: [
+        {
+          id: `diary_${Date.now()}`,
+          date: new Date(),
+          type: 'auto',
+          content: t.dossiers.contactAddedToNetwork,
+        },
+      ],
+      addedDate: new Date(),
+    };
+    addDossier(newDossier);
+    if (onOpenDossier) {
+      onOpenDossier({ id: newDossier.contact.id, edit: true });
+    } else {
+      router.push({ pathname: '/dossier/[id]' as any, params: { id: newDossier.contact.id, edit: 'true' } });
+    }
+  }, [addDossier, t.dossiers, onOpenDossier]);
 
   const loadContacts = async () => {
     if (Platform.OS === 'web') {
-      Alert.alert(t.dossiers.notAvailable, t.dossiers.contactAccessWeb);
+      createAndOpenDossier();
       return;
     }
 
@@ -140,7 +268,7 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
       const { status } = await Contacts.requestPermissionsAsync();
       if (status === 'granted') {
         const { data } = await Contacts.getContactsAsync({
-          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Image, Contacts.Fields.Company, Contacts.Fields.JobTitle],
+          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Image, Contacts.Fields.Company, Contacts.Fields.JobTitle, Contacts.Fields.Birthday],
         });
         setPhoneContacts(data);
         setShowContactsModal(true);
@@ -165,6 +293,7 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
         company: contact.company,
         position: contact.jobTitle,
         photo: contact.image?.uri,
+        birthday: contact.birthday ? formatContactBirthday(contact.birthday) : undefined,
       },
       sectors: [],
       functionalCircle: 'productivity',
@@ -371,6 +500,84 @@ function DossiersTab({ onOpenDossier }: { onOpenDossier?: OpenDossierHandler }) 
             </View>
           </>
         )}
+
+        <Modal
+          visible={showManualModal}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setShowManualModal(false)}
+        >
+          <View style={styles.manualModalOverlay}>
+            <View style={styles.manualModalContent}>
+              <View style={styles.modalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <UserPlus size={24} color={theme.primary} />
+                  <Text style={styles.modalTitle}>{t.dossiers.addManually}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowManualModal(false)}
+                  activeOpacity={0.7}
+                >
+                  <X size={24} color={theme.primary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.manualFormScroll} keyboardShouldPersistTaps="handled">
+                <Text style={styles.manualLabel}>{t.dossiers.newContactName} *</Text>
+                <TextInput
+                  style={styles.manualInput}
+                  value={manualName}
+                  onChangeText={setManualName}
+                  placeholder={t.dossiers.newContactName}
+                  placeholderTextColor={theme.primaryDim}
+                  autoFocus
+                />
+                <Text style={styles.manualLabel}>{t.dossiers.newContactPhone}</Text>
+                <TextInput
+                  style={styles.manualInput}
+                  value={manualPhone}
+                  onChangeText={setManualPhone}
+                  placeholder={t.dossiers.newContactPhone}
+                  placeholderTextColor={theme.primaryDim}
+                  keyboardType="phone-pad"
+                />
+                <Text style={styles.manualLabel}>{t.dossiers.newContactEmail}</Text>
+                <TextInput
+                  style={styles.manualInput}
+                  value={manualEmail}
+                  onChangeText={setManualEmail}
+                  placeholder={t.dossiers.newContactEmail}
+                  placeholderTextColor={theme.primaryDim}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                <Text style={styles.manualLabel}>{t.dossiers.newContactCompany}</Text>
+                <TextInput
+                  style={styles.manualInput}
+                  value={manualCompany}
+                  onChangeText={setManualCompany}
+                  placeholder={t.dossiers.newContactCompany}
+                  placeholderTextColor={theme.primaryDim}
+                />
+                <Text style={styles.manualLabel}>{t.dossiers.newContactPosition}</Text>
+                <TextInput
+                  style={styles.manualInput}
+                  value={manualPosition}
+                  onChangeText={setManualPosition}
+                  placeholder={t.dossiers.newContactPosition}
+                  placeholderTextColor={theme.primaryDim}
+                />
+                <TouchableOpacity
+                  style={styles.manualCreateButton}
+                  onPress={handleManualCreate}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={18} color={theme.primary} />
+                  <Text style={styles.manualCreateButtonText}>{t.dossiers.create}</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
 
         <Modal
           visible={showContactsModal}
@@ -1020,6 +1227,62 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     color: theme.textSecondary,
     fontFamily: 'monospace' as const,
+  },
+  manualModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  manualModalContent: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '85%',
+    backgroundColor: theme.background,
+    borderWidth: 2,
+    borderColor: theme.border,
+  },
+  manualFormScroll: {
+    padding: 20,
+  },
+  manualLabel: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: theme.primaryDim,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  manualInput: {
+    borderWidth: 2,
+    borderColor: theme.border,
+    backgroundColor: theme.overlay,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: theme.text,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 1,
+  },
+  manualCreateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: theme.primary,
+    paddingVertical: 14,
+    marginTop: 24,
+    marginBottom: 20,
+    gap: 8,
+  },
+  manualCreateButtonText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: theme.primary,
+    fontFamily: 'monospace' as const,
+    letterSpacing: 2,
   },
 });
 
